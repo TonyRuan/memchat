@@ -35,6 +35,7 @@ class OpenAICompatibleProvider(
         val body = JsonObject().apply {
             addProperty("model", request.model)
             addProperty("stream", stream)
+            addProperty("max_tokens", 4096)
             val msgs = com.google.gson.JsonArray()
             request.messages.forEach { msg ->
                 msgs.add(JsonObject().apply {
@@ -130,3 +131,4 @@ class OpenAICompatibleProvider(
         return ChatResponse(content = content)
     }
 }
+
