@@ -118,3 +118,18 @@
 ### Key Finding
 MiMo model uses separate reasoning_content field that consumes max_tokens. Must set max_tokens >= 4096 to ensure content is not empty.
 
+
+---
+
+## v1.0.5 (2026-05-30 23:10)
+
+### Changes
+- Fixed: Use max_completion_tokens instead of max_tokens (MiMo API uses OpenAI newer param)
+- Added configurable Max Tokens in Settings page (default: 8192)
+- MiMo reasoning_content consumes ~100 tokens per request, rest is for content
+- SettingsDataStore cleaned up with proper function declarations
+
+### API Testing
+- max_tokens=100 → finish_reason=length, content empty (too small for reasoning)
+- max_completion_tokens=100 → finish_reason=stop, content works
+- No max_tokens → finish_reason=stop, auto-uses needed tokens

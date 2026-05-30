@@ -23,7 +23,8 @@ interface LlmProvider {
 class OpenAICompatibleProvider(
     private val apiKey: String,
     private val baseUrl: String,
-    private val modelName: String
+    private val modelName: String,
+    private val maxTokens: Int = 8192
 ) : LlmProvider {
 
     private val client = OkHttpClient.Builder()
@@ -35,7 +36,7 @@ class OpenAICompatibleProvider(
         val body = JsonObject().apply {
             addProperty("model", request.model)
             addProperty("stream", stream)
-            addProperty("max_tokens", 4096)
+            addProperty("max_completion_tokens", maxTokens)
             val msgs = com.google.gson.JsonArray()
             request.messages.forEach { msg ->
                 msgs.add(JsonObject().apply {
@@ -131,4 +132,6 @@ class OpenAICompatibleProvider(
         return ChatResponse(content = content)
     }
 }
+
+
 

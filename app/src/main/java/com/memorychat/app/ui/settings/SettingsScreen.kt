@@ -28,6 +28,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     var modelName by remember { mutableStateOf("gpt-4o-mini") }
     var defaultUseMemory by remember { mutableStateOf(true) }
     var defaultGenerateMemory by remember { mutableStateOf(true) }
+    var maxTokens by remember { mutableStateOf("8192") }
 
     LaunchedEffect(Unit) {
         app.settingsDataStore.providerType.collect { providerType = it }
@@ -46,6 +47,9 @@ fun SettingsScreen(onBack: () -> Unit) {
     }
     LaunchedEffect(Unit) {
         app.settingsDataStore.defaultGenerateMemory.collect { defaultGenerateMemory = it }
+    }
+    LaunchedEffect(Unit) {
+        app.settingsDataStore.maxTokens.collect { maxTokens = it.toString() }
     }
 
     Scaffold(
@@ -149,6 +153,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         app.settingsDataStore.saveModelName(modelName)
                         app.settingsDataStore.saveDefaultUseMemory(defaultUseMemory)
                         app.settingsDataStore.saveDefaultGenerateMemory(defaultGenerateMemory)
+                        app.settingsDataStore.saveMaxTokens(maxTokens.toIntOrNull() ?: 8192)
                         Toast.makeText(context, "设置已保存", Toast.LENGTH_SHORT).show()
                     }
                 },
@@ -159,3 +164,4 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
     }
 }
+

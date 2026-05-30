@@ -43,9 +43,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val apiKey = app.settingsDataStore.apiKey.first()
             val baseUrl = app.settingsDataStore.baseUrl.first()
             val model = app.settingsDataStore.modelName.first()
+            val maxTokens = app.settingsDataStore.maxTokens.first()
 
             if (apiKey.isNotBlank()) {
-                llmProvider = OpenAICompatibleProvider(apiKey, baseUrl, model)
+                llmProvider = OpenAICompatibleProvider(apiKey, baseUrl, model, maxTokens)
                 memoryEngine = MemoryEngine(llmProvider!!)
                 AppLogger.i("ChatVM", "Provider ready: $model")
             }
@@ -186,3 +187,4 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
+
