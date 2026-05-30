@@ -1,0 +1,2 @@
+-keep class com.memorychat.app.domain.model.** { *; }
+-keep class com.memorychat.app.data.local.db.entity.** { *; }
