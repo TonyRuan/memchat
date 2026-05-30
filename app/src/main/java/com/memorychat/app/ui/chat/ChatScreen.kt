@@ -1,6 +1,8 @@
 package com.memorychat.app.ui.chat
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,21 +35,35 @@ fun ChatScreen(
     val streamingContent by viewModel.streamingContent.collectAsState()
     val conversation by viewModel.conversation.collectAsState()
     val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
 
     var inputText by remember { mutableStateOf("") }
+    var deleteTarget by remember { mutableStateOf<ChatMessage?>(null) }
 
     LaunchedEffect(conversationId) {
         viewModel.loadConversation(conversationId)
     }
 
     LaunchedEffect(messages.size, streamingContent) {
-        if (messages.isNotEmpty() || streamingContent.isNotEmpty()) {
-            val totalItems = messages.size + if (streamingContent.isNotEmpty()) 1 else 0
-            if (totalItems > 0) {
-                listState.animateScrollToItem(totalItems - 1)
+        val total = messages.size + if (streamingContent.isNotEmpty()) 1 else 0
+        if (total > 0) listState.animateScrollToItem(total - 1)
+    }
+
+    // Delete confirmation dialog
+    deleteTarget?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("Delete Message") },
+            text = { Text("Delete this message?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteMessage(msg.id)
+                    deleteTarget = null
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("Cancel") }
             }
-        }
+        )
     }
 
     Scaffold(
@@ -70,9 +86,7 @@ fun ChatScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding)
-        ) {
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -80,30 +94,26 @@ fun ChatScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(messages, key = { it.id }) { msg ->
-                    MessageBubble(message = msg)
+                    MessageBubble(
+                        message = msg,
+                        onLongClick = { deleteTarget = msg }
+                    )
                 }
 
                 if (isGenerating && streamingContent.isNotEmpty()) {
                     item {
                         MessageBubble(
-                            message = ChatMessage(
-                                conversationId = conversationId,
-                                role = "assistant",
-                                content = streamingContent
-                            )
+                            message = ChatMessage(conversationId = conversationId, role = "assistant", content = streamingContent),
+                            onLongClick = {}
                         )
                     }
                 }
 
                 if (isGenerating && streamingContent.isEmpty()) {
                     item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Start
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
                             Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
+                                modifier = Modifier.clip(RoundedCornerShape(12.dp))
                                     .background(MaterialTheme.colorScheme.surfaceVariant)
                                     .padding(12.dp)
                             ) {
@@ -148,8 +158,9 @@ fun ChatScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MessageBubble(message: ChatMessage) {
+fun MessageBubble(message: ChatMessage, onLongClick: () -> Unit) {
     val isUser = message.role == "user"
 
     Row(
@@ -163,6 +174,10 @@ fun MessageBubble(message: ChatMessage) {
                 .background(
                     if (isUser) MaterialTheme.colorScheme.primaryContainer
                     else MaterialTheme.colorScheme.surfaceVariant
+                )
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = onLongClick
                 )
                 .padding(12.dp)
         ) {

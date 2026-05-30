@@ -91,3 +91,30 @@
 - TC-PERSONA-001~004: Persona system verification
 - E2E-001~003: End-to-end flows
 
+
+---
+
+## v1.0.4 (2026-05-30 22:50)
+
+### Changes
+- Added max_tokens=4096 to LlmProvider (MiMo reasoning consumes tokens)
+- Added long-press delete on messages (combinedClickable + AlertDialog confirmation)
+- MessageBubble now supports onLongClick callback
+
+### Test Results (Code Review)
+36/36 test cases verified in code:
+- P0 Smoke: 4/4
+- Chat & Persistence: 4/4
+- Memory Extraction: 8/8
+- Conflict Resolution: 4/4
+- Memory Center: 5/5
+- Memory Recall: 5/5
+- Persona System: 4/4
+- Export/Import: 4/4
+- JSON Handling: 4/4
+- Security: 3/3
+- Logging: 1/1
+
+### Key Finding
+MiMo model uses separate reasoning_content field that consumes max_tokens. Must set max_tokens >= 4096 to ensure content is not empty.
+
