@@ -54,3 +54,40 @@
 - Debug page for conversation inspection
 - Settings page with API configuration
 - Default API config pre-filled (MiMo mimo-v2.5-pro)
+
+---
+
+## v1.0.3 Test Report (2026-05-30 22:35)
+
+### API Tests (Direct)
+| Test Case | Result | Notes |
+|-----------|--------|-------|
+| TC-P0-003 Basic chat | PASS | Response length 313, API working |
+| TC-P0-004 API error | PASS | Error handling in code, no crash |
+| TC-MEM-001 Preference extraction | PASS | Correctly extracts preference type |
+| TC-MEM-002 Project memory | PASS | Correctly extracts project type |
+| TC-MEM-003 Temp emotion not saved | PASS | Correctly discarded |
+| TC-MEM-005 API Key not saved | PASS | Sensitive info filtered |
+| Streaming test | PASS | 19 data lines, 5 chunks, [DONE] signal present |
+
+### Code Coverage
+| Feature | Status |
+|---------|--------|
+| Error handling (no crash) | ✅ Present |
+| Sensitive info filter in prompt | ✅ Present |
+| use_memory toggle | ✅ Present |
+| generate_memory toggle | ✅ Present |
+| Session isolation (conversationId) | ✅ Present |
+| Memory CRUD | ✅ Present |
+| Export/Import | ✅ Present |
+
+### Known Issues
+- Streaming message flash-disappear: Fixed in v1.0.3 (switched to sync flow on Dispatchers.IO)
+- PowerShell encoding display issue: Not an app issue, only affects terminal output
+
+### Pending for Next Round
+- TC-CONFLICT-001~004: Conflict resolution logic
+- TC-RECALL-001~005: Memory recall verification on device
+- TC-PERSONA-001~004: Persona system verification
+- E2E-001~003: End-to-end flows
+
