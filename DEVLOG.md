@@ -133,3 +133,16 @@ MiMo model uses separate reasoning_content field that consumes max_tokens. Must 
 - max_tokens=100 → finish_reason=length, content empty (too small for reasoning)
 - max_completion_tokens=100 → finish_reason=stop, content works
 - No max_tokens → finish_reason=stop, auto-uses needed tokens
+
+---
+
+## v1.0.6 (2026-05-30 23:35)
+
+### Changes
+- Added AdbInputReceiver for emulator testing via ADB broadcast
+- Fixed AndroidManifest.xml to properly register the receiver
+- API call now works end-to-end via emulator
+
+### Emulator Testing
+- ADB broadcast: m broadcast -n com.memorychat.app/.AdbInputReceiver -a com.memorychat.app.SEND_MESSAGE --es msg 'text' --es conv_id 'id'
+- Verified: user message saved, API call successful, assistant response saved
