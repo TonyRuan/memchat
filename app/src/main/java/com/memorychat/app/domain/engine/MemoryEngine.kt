@@ -2,12 +2,24 @@ package com.memorychat.app.domain.engine
 
 import com.google.gson.JsonParser
 import com.memorychat.app.domain.model.*
+import com.memorychat.app.util.AppLogger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.memorychat.app.domain.provider.LlmProvider
 
-class MemoryEngine(private val llmProvider: LlmProvider) {
+class MemoryEngine(private val llmProvider: LlmProvider, private val modelName: String = "") {
 
     companion object {
-        const val EXTRACTION_PROMPT = "You are a long-term memory extractor. Extract stable, useful information from the conversation. Do NOT save: temporary emotions, jokes, sensitive info, API keys, passwords, tokens. Output strict JSON only."
+        const val EXTRACTION_PROMPT = """You are a long-term memory extractor. Extract stable, useful information from the conversation.
+
+RULES:
+1. ALWAYS extract when user explicitly says "remember", "note", "don't forget", "keep in mind"
+2. Extract user preferences, habits, traits, goals, project info
+3. Extract facts user states about themselves (name, job, location, hobbies)
+4. Extract decisions and conclusions from the conversation
+5. Do NOT save: temporary emotions, jokes, sensitive info, API keys, passwords, tokens
+6. If user says "remember X", extract X as a memory with high confidence (0.9+)
+7. Output strict JSON only"""
 
         fun buildRecallPrompt(
             persona: Persona?,
@@ -82,15 +94,20 @@ Output JSON format:
 
         val request = ChatRequest(
             messages = listOf(ChatMessage(role = "user", content = prompt)),
-            model = "",
+            model = modelName,
             stream = false
         )
 
-        return try {
-            val response = llmProvider.complete(request)
-            parseExtractionResult(response.content)
-        } catch (e: Exception) {
-            MemoryExtractionResult()
+        AppLogger.i("MemoryEngine", "Extracting: msgCount=${messages.size}, model=$modelName")
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = llmProvider.complete(request)
+                AppLogger.i("MemoryEngine", "Response: ${response.content.take(200)}")
+                parseExtractionResult(response.content)
+            } catch (e: Exception) {
+                AppLogger.e("MemoryEngine", "Extract failed: ${e.javaClass.simpleName}: ${e.message}")
+                MemoryExtractionResult()
+            }
         }
     }
 
@@ -132,6 +149,7 @@ Output JSON format:
 
             MemoryExtractionResult(newMemories, updates, discarded)
         } catch (e: Exception) {
+            AppLogger.e("MemoryEngine", "Extract failed: ${e.javaClass.simpleName}: ${e.message}")
             MemoryExtractionResult()
         }
     }
@@ -176,3 +194,12 @@ Output JSON format:
         }
     }
 }
+
+
+
+
+
+
+
+
+

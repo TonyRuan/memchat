@@ -47,7 +47,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             if (apiKey.isNotBlank()) {
                 llmProvider = OpenAICompatibleProvider(apiKey, baseUrl, model, maxTokens)
-                memoryEngine = MemoryEngine(llmProvider!!)
+                memoryEngine = MemoryEngine(llmProvider!!, model)
                 AppLogger.i("ChatVM", "Provider ready: $model")
             }
         }
@@ -187,4 +187,5 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
+
 
