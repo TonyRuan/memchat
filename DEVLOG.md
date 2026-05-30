@@ -146,3 +146,16 @@ MiMo model uses separate reasoning_content field that consumes max_tokens. Must 
 ### Emulator Testing
 - ADB broadcast: m broadcast -n com.memorychat.app/.AdbInputReceiver -a com.memorychat.app.SEND_MESSAGE --es msg 'text' --es conv_id 'id'
 - Verified: user message saved, API call successful, assistant response saved
+
+---
+
+## v1.0.7 (2026-05-30 16:02)
+
+### Bug Fixes
+- **MemoryEngine**: Added modelName parameter — extraction API was calling with empty model
+- **MemoryEngine**: Wrapped API call in withContext(Dispatchers.IO) — fixed NetworkOnMainThreadException
+- **MemoryEngine**: Enhanced error logging with exception class name
+- **EXTRACTION_PROMPT**: Improved rules for explicit "remember" patterns
+
+### Verified
+- Memory extraction now works: "用户是一名Android开发者，在北京工作" extracted as PROFILE
