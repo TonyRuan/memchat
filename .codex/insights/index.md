@@ -11,4 +11,4 @@
 | ID | 标题 | 状态 | 可信度 | 更新 | 摘要 |
 | --- | --- | --- | --- | --- | --- |
 | prd-aligned-subagent-testing | PRD 对齐的子代理测试偏好 | active | 90 | 2026-06-01 | 做测试审查和测试重构时，尽量使用子代理并行，降低上下文污染；测试要按 PRD 和项目真实行为重构，不沿用不严谨旧测试。|
-| development-delivery-process | 开发交付流程偏好 | active | 90 | 2026-06-01 | 有效变更需同步版本号、写开发日志、Git 保存；关键交付构建 Debug APK 方便测试。|
+| development-delivery-process | 开发交付流程偏好 | active | 90 | 2026-06-01 | 影响应用行为或可测试产物的有效变更需同步版本号、写开发日志、Git 保存；关键交付构建 Debug APK 方便测试。|

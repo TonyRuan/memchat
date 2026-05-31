@@ -29,11 +29,13 @@ class ConversationListViewModel(application: Application) : AndroidViewModel(app
     fun createConversation(title: String = "新会话"): String {
         val conv = Conversation(title = title)
         viewModelScope.launch {
-            val defaultPersona = app.personaRepo.getDefaultPersona()
+            val configuredPersonaId = app.settingsDataStore.defaultPersonaId.first().takeIf { it.isNotBlank() }
+            val defaultPersona = configuredPersonaId?.let { app.personaRepo.getPersona(it) }
+                ?: app.getOrCreateDefaultPersona()
             val useMemory = app.settingsDataStore.defaultUseMemory.first()
             val generateMemory = app.settingsDataStore.defaultGenerateMemory.first()
             val convWithDefaults = conv.copy(
-                personaId = defaultPersona?.id,
+                personaId = defaultPersona.id,
                 useMemory = useMemory,
                 generateMemory = generateMemory
             )

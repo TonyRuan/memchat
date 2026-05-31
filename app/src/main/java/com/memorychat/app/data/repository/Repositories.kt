@@ -35,7 +35,7 @@ class MemoryRepository(private val memoryDao: MemoryDao, private val tombstoneDa
 
     private fun MemoryEntity.toDomain(): Memory {
         val ids: List<String> = try {
-            gson.fromJson(sourceMessageIds, object : TypeToken<List<String>>() {}.type)
+            gson.fromJson<List<String>>(sourceMessageIds, object : TypeToken<List<String>>() {}.type) ?: emptyList()
         } catch (_: Exception) { emptyList() }
         return Memory(id, MemoryType.valueOf(type), content, MemoryStatus.valueOf(status),
             importance, confidence, ids, sourceConversationId, createdAt, updatedAt, lastUsedAt, userEdited == 1)
@@ -80,10 +80,10 @@ class MemoryRepository(private val memoryDao: MemoryDao, private val tombstoneDa
 class PersonaRepository(private val personaDao: PersonaDao) {
     private fun PersonaEntity.toDomain(): Persona {
         val rules: List<String> = try {
-            gson.fromJson(behaviorRulesJson, object : TypeToken<List<String>>() {}.type)
+            gson.fromJson<List<String>>(behaviorRulesJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
         } catch (_: Exception) { emptyList() }
         val bounds: List<String> = try {
-            gson.fromJson(boundariesJson, object : TypeToken<List<String>>() {}.type)
+            gson.fromJson<List<String>>(boundariesJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
         } catch (_: Exception) { emptyList() }
         return Persona(id, name, avatar, description, role, tone, rules, bounds, proactivity, isDefault == 1, createdAt, updatedAt)
     }
@@ -100,6 +100,29 @@ class PersonaRepository(private val personaDao: PersonaDao) {
     suspend fun listPersonas() = personaDao.getAll().map { it.toDomain() }
     suspend fun savePersona(persona: Persona) = personaDao.insert(persona.toEntity())
     suspend fun deletePersona(id: String) = personaDao.delete(id)
+
+    suspend fun getOrCreateDefaultPersona(): Persona {
+        getDefaultPersona()?.let { return it }
+        val defaultPersona = createDefaultPersona()
+        savePersona(defaultPersona)
+        return getDefaultPersona() ?: defaultPersona
+    }
+
+    companion object {
+        const val DEFAULT_PERSONA_ID = "persona_default"
+
+        fun createDefaultPersona(): Persona = Persona(
+            id = DEFAULT_PERSONA_ID,
+            name = "技术伙伴",
+            description = "适合产品讨论、技术协作的默认人格",
+            role = "技术协作者",
+            tone = "直接、清晰、有见地",
+            behaviorRules = listOf("漏指令立即补全", "结论先行再展开", "必要时引用参考", "不确定时直接说明"),
+            boundaries = listOf("不要假装知道不确定的信息", "不要在无偏好的时候硬编偏好"),
+            proactivity = 4,
+            isDefault = true
+        )
+    }
 }
 
 class ExportImportService(
@@ -193,7 +216,7 @@ class ExportImportService(
         return gson.toJson(mapOf(
             "version" to "1.0",
             "exported_at" to java.time.Instant.now().toString(),
-            "personas" to personas
+            "personas" to personas.map { it.toExportJson() }
         ))
     }
 
@@ -205,23 +228,19 @@ class ExportImportService(
             arr.forEach { item ->
                 try {
                     val o = item.asJsonObject
-                    val rules: List<String> = try {
-                        gson.fromJson(o.getAsJsonArray("behavior_rules"), object : TypeToken<List<String>>() {}.type)
-                    } catch (_: Exception) { emptyList() }
-                    val bounds: List<String> = try {
-                        gson.fromJson(o.getAsJsonArray("boundaries"), object : TypeToken<List<String>>() {}.type)
-                    } catch (_: Exception) { emptyList() }
-
                     val persona = Persona(
-                        id = o.get("id")?.asString ?: java.util.UUID.randomUUID().toString(),
-                        name = o.get("name")?.asString ?: "Unnamed",
-                        description = o.get("description")?.asString,
-                        role = o.get("role")?.asString,
-                        tone = o.get("tone")?.asString,
-                        behaviorRules = rules,
-                        boundaries = bounds,
-                        proactivity = o.get("proactivity")?.asInt ?: 3,
-                        isDefault = o.get("is_default")?.asBoolean ?: false
+                        id = o.stringValue("id") ?: java.util.UUID.randomUUID().toString(),
+                        name = o.stringValue("name") ?: "Unnamed",
+                        avatar = o.stringValue("avatar"),
+                        description = o.stringValue("description"),
+                        role = o.stringValue("role"),
+                        tone = o.stringValue("tone"),
+                        behaviorRules = o.stringListValue("behavior_rules", "behaviorRules"),
+                        boundaries = o.stringListValue("boundaries"),
+                        proactivity = o.intValue("proactivity") ?: 3,
+                        isDefault = o.booleanValue("is_default", "isDefault") ?: false,
+                        createdAt = o.longValue("created_at", "createdAt") ?: System.currentTimeMillis(),
+                        updatedAt = o.longValue("updated_at", "updatedAt") ?: System.currentTimeMillis()
                     )
                     personaRepository.savePersona(persona)
                     imported++
@@ -231,6 +250,66 @@ class ExportImportService(
         } catch (e: Exception) {
             ImportResult(0, 0, listOf(e.message ?: "Parse error"))
         }
+    }
+
+    private fun Persona.toExportJson(): Map<String, Any?> = linkedMapOf(
+        "id" to id,
+        "name" to name,
+        "avatar" to avatar,
+        "description" to description,
+        "role" to role,
+        "tone" to tone,
+        "behavior_rules" to behaviorRules,
+        "boundaries" to boundaries,
+        "proactivity" to proactivity,
+        "is_default" to isDefault,
+        "created_at" to createdAt,
+        "updated_at" to updatedAt
+    )
+
+    private fun com.google.gson.JsonObject.value(vararg names: String): com.google.gson.JsonElement? {
+        for (name in names) {
+            val element = get(name)
+            if (element != null && !element.isJsonNull) return element
+        }
+        return null
+    }
+
+    private fun com.google.gson.JsonObject.stringValue(vararg names: String): String? {
+        return value(*names)?.asString
+    }
+
+    private fun com.google.gson.JsonObject.intValue(vararg names: String): Int? {
+        return try {
+            value(*names)?.asInt
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun com.google.gson.JsonObject.longValue(vararg names: String): Long? {
+        return try {
+            value(*names)?.asLong
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun com.google.gson.JsonObject.booleanValue(vararg names: String): Boolean? {
+        return try {
+            value(*names)?.asBoolean
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun com.google.gson.JsonObject.stringListValue(vararg names: String): List<String> {
+        val parsed: List<String>? = try {
+            gson.fromJson(value(*names), object : TypeToken<List<String>>() {}.type)
+        } catch (_: Exception) {
+            null
+        }
+        return parsed ?: emptyList()
     }
 }
 

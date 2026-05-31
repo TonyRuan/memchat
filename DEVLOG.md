@@ -1,5 +1,22 @@
 # MemoryChat Development Log
 
+## v1.0.34 (2026-06-01)
+
+### Changes
+- Saved pending source changes around default persona initialization and lookup
+- Reused the default persona creation path from application startup and new conversation creation
+- Added persona-aware memory recall for the ADB input path
+- Improved persona import/export JSON compatibility and fixed memory center dialog titles
+
+### Verification
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.34-debug.apk`
+
+---
+
 ## v1.0.33 (2026-06-01)
 
 ### Changes

@@ -22,7 +22,7 @@
 
 ## 开发交付约定
 
-- 每次有效项目变更交付前，都要同步更新 `app/build.gradle` 中的 `versionCode` 和 `versionName`。
+- 影响应用行为、配置默认值、调试流程或可测试产物的有效变更交付前，都要同步更新 `app/build.gradle` 中的 `versionCode` 和 `versionName`；纯审计、规划或只读分析不单独更新应用版本号。
 - 每次有效项目变更都要写 `DEVLOG.md`，记录版本、日期、关键变更、验证结果和 APK 输出情况。
 - 每次有效项目变更完成验证后，都要用 Git 做一次范围清晰的保存；只提交本次相关文件，不混入无关改动。
 - 关键功能、体验、配置或验收相关变更交付时，默认运行 `.\gradlew.bat assembleDebug` 产出 Debug APK，并在交付说明中给出 APK 路径。

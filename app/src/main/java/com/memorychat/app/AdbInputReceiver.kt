@@ -7,6 +7,7 @@ import android.util.Log
 import com.memorychat.app.data.local.db.AppDatabase
 import com.memorychat.app.data.local.datastore.SettingsDataStore
 import com.memorychat.app.data.local.db.entity.MessageEntity
+import com.memorychat.app.data.repository.PersonaRepository
 import com.memorychat.app.domain.model.ChatMessage
 import com.memorychat.app.domain.model.ChatRequest
 import com.memorychat.app.domain.model.Memory
@@ -41,6 +42,7 @@ class AdbInputReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         val db = AppDatabase.getInstance(context)
         val ds = SettingsDataStore(context)
+        val personaRepo = PersonaRepository(db.personaDao())
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -62,6 +64,13 @@ class AdbInputReceiver : BroadcastReceiver() {
 
                 if (apiKey.isNotBlank()) {
                     val provider = OpenAICompatibleProvider(apiKey, baseUrl, model)
+                    val conversation = db.conversationDao().getById(conversationId)
+                    val persona = conversation?.personaId?.let { personaRepo.getPersona(it) }
+                    if (conversation == null) {
+                        Log.w("AdbInput", "Conversation not found for conv_id=$conversationId")
+                    } else {
+                        Log.i("AdbInput", "Conversation persona=${conversation.personaId ?: "none"}")
+                    }
 
                     // === MEMORY RECALL ===
                     Log.i("AdbInput", "[2/4] Memory recall start")
@@ -89,7 +98,7 @@ class AdbInputReceiver : BroadcastReceiver() {
 
                     if (activeMemories.isNotEmpty()) {
                         val memoryEngine = MemoryEngine(provider, model)
-                        val recall = memoryEngine.recall(message, activeMemories, null)
+                        val recall = memoryEngine.recall(message, activeMemories, persona)
                         recalledCount = recall.memories.size
                         Log.i("AdbInput", "  Recall: scene=${recall.scene}, matched=$recalledCount")
                         
@@ -99,7 +108,7 @@ class AdbInputReceiver : BroadcastReceiver() {
 
                         if (recall.memories.isNotEmpty()) {
                             val systemPrompt = MemoryEngine.buildRecallPrompt(
-                                persona = null,
+                                persona = persona,
                                 preferences = recall.memories.filter { it.type == MemoryType.PREFERENCE },
                                 profile = recall.memories.filter { it.type == MemoryType.PROFILE },
                                 projects = recall.memories.filter { it.type == MemoryType.PROJECT },

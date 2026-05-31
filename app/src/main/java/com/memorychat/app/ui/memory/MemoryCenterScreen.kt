@@ -51,7 +51,7 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("查看来源") },
+                title = { Text("记忆中心") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
@@ -230,7 +230,7 @@ fun EditMemoryDialog(memory: Memory, onDismiss: () -> Unit, onSave: (Memory) -> 
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("查看来源") },
+        title = { Text("编辑记忆") },
         text = {
             OutlinedTextField(value = content, onValueChange = { content = it }, modifier = Modifier.fillMaxWidth())
         },
@@ -253,7 +253,7 @@ fun AddMemoryDialog(onDismiss: () -> Unit, onSave: (MemoryType, String) -> Unit)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("查看来源") },
+        title = { Text("添加记忆") },
         text = {
             Column {
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
