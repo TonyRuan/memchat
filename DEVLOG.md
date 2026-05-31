@@ -1,5 +1,22 @@
 # MemoryChat Development Log
 
+## v1.0.35 (2026-06-01)
+
+### Changes
+- Added Android instrumentation test dependencies and a first-launch Compose smoke test
+- Added shared fake LLM provider test utility for deterministic chat and memory tests
+- Added an ADB smoke script for installing the APK, selecting a conversation, and exercising the real-model broadcast path
+
+### Verification
+- `.\gradlew.bat test`
+- `.\gradlew.bat connectedDebugAndroidTest`
+- `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.35-debug.apk`
+
+---
+
 ## v1.0.34 (2026-06-01)
 
 ### Changes
