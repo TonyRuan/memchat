@@ -21,6 +21,17 @@ import kotlinx.coroutines.launch
 
 class AdbInputReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // Handle API key setting
+        val setApiKey = intent.getStringExtra("set_api_key")
+        if (setApiKey != null) {
+            val ds = SettingsDataStore(context)
+            CoroutineScope(Dispatchers.IO).launch {
+                ds.saveApiKey(setApiKey)
+                Log.i("AdbInput", "API Key set: ${setApiKey.take(8)}...")
+            }
+            return
+        }
+        
         val message = intent.getStringExtra("msg") ?: return
         val conversationId = intent.getStringExtra("conv_id") ?: return
 
@@ -145,3 +156,4 @@ class AdbInputReceiver : BroadcastReceiver() {
         }
     }
 }
+
