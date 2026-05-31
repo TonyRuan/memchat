@@ -23,4 +23,24 @@ class ApiKeyDefaultsTest {
 
         assertEquals("default-key", resolved)
     }
+
+    @Test
+    fun resolveFallsBackToTrimmedDefaultApiKeyWhenStoredValueIsNull() {
+        val resolved = ApiKeyDefaults.resolve(
+            storedApiKey = null,
+            defaultApiKey = "  default-key  "
+        )
+
+        assertEquals("default-key", resolved)
+    }
+
+    @Test
+    fun resolveTrimsStoredApiKeyBeforeReturningIt() {
+        val resolved = ApiKeyDefaults.resolve(
+            storedApiKey = "  stored-key  ",
+            defaultApiKey = "default-key"
+        )
+
+        assertEquals("stored-key", resolved)
+    }
 }

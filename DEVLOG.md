@@ -1,5 +1,22 @@
 # MemoryChat Development Log
 
+## v1.0.32 (2026-06-01)
+
+### Changes
+- Added testing conventions to prefer parallel subagents for broad test review and refactoring
+- Defined PRD-aligned test refactoring as the default direction for future test work
+- Recorded the testing workflow preference in project insights
+- Refactored JVM unit coverage around API key defaults, memories import/export, memory recall, and recall prompt assembly
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.data.local.datastore.ApiKeyDefaultsTest" --tests "com.memorychat.app.data.repository.RepositoriesTest" --tests "com.memorychat.app.domain.engine.MemoryEngineTest"`
+- `.\gradlew.bat test`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.32-debug.apk`
+
+---
+
 ## v1.0.31 (2026-06-01)
 
 ### Changes
