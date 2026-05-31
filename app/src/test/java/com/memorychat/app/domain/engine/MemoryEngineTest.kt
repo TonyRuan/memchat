@@ -55,6 +55,23 @@ class MemoryEngineTest {
     }
 
     @Test
+    fun recallForExplicitMemoryQuestionIncludesProjectMemories() {
+        val memories = listOf(
+            memory("project-1", MemoryType.PROJECT, "第一阶段优先验证记忆系统"),
+            memory("preference-1", MemoryType.PREFERENCE, "尽量使用中文")
+        )
+
+        val result = engine.recall(
+            userMessage = "还记得我让你记住的内容吗？",
+            allActiveMemories = memories,
+            persona = null
+        )
+
+        assertEquals("memory_query", result.scene)
+        assertTrue(result.memories.any { it.id == "project-1" })
+    }
+
+    @Test
     fun recallDeduplicatesAndCapsResults() {
         val duplicate = memory("same-id", MemoryType.PROFILE, "用户偏好中文")
         val memories = listOf(duplicate, duplicate.copy(content = "重复内容")) +

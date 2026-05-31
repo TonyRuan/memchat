@@ -1,5 +1,28 @@
 # MemoryChat Development Log
 
+## v1.0.41 (2026-06-01)
+
+### Changes
+- Added explicit-remember fallback extraction so clear user commands like "记住/remember" still save a memory when the model replies with non-JSON text
+- Made memory extraction parsing tolerate Chinese type/status labels and unknown labels without dropping the whole result
+- Improved duplicate detection to ignore case, punctuation, and spacing differences when saving extracted memories
+- Added a memory-query recall scene so questions like "还记得/remember" include project and preference memories
+- Added snackbar feedback for manual memory extraction outcomes
+- Wired the debug ADB message path to run memory extraction after successful assistant replies and to honor conversation memory switches
+- Made the ADB smoke script fail on model/network errors or missing completion markers instead of silently passing
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest" --tests "com.memorychat.app.domain.engine.MemoryEngineTest"`
+- `.\gradlew.bat test`
+- `.\gradlew.bat test connectedDebugAndroidTest assembleDebug`
+- Sub-agent emulator check on the previous installed build confirmed the memory chain was reachable: automatic extraction wrote an active preference, memory center displayed it, and later recall answered with the saved fact; it also exposed duplicate extraction for case/punctuation variants, which is fixed in this version
+- Final v1.0.41 emulator ADB validation passed after switching the debug receiver to Base64 message input: latest APK installed successfully, network/API returned `[4/4] API response`, extraction saved `blue cedar QX77` with `new=1, updates=0`, and the recall answer included `blue cedar QX77`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.41-debug.apk`
+
+---
+
 ## v1.0.40 (2026-06-01)
 
 ### Changes

@@ -34,7 +34,9 @@ fun ChatScreen(
     val isGenerating by viewModel.isGenerating.collectAsState()
     val streamingContent by viewModel.streamingContent.collectAsState()
     val conversation by viewModel.conversation.collectAsState()
+    val memoryExtractionStatus by viewModel.memoryExtractionStatus.collectAsState()
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var inputText by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<ChatMessage?>(null) }
@@ -47,6 +49,13 @@ fun ChatScreen(
     LaunchedEffect(messages.size, streamingContent) {
         val total = messages.size + if (streamingContent.isNotEmpty()) 1 else 0
         if (total > 0) listState.animateScrollToItem(total - 1)
+    }
+
+    LaunchedEffect(memoryExtractionStatus) {
+        memoryExtractionStatus?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearMemoryExtractionStatus()
+        }
     }
 
     // Delete confirmation dialog
@@ -123,6 +132,7 @@ fun ChatScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(conversation?.title ?: "Chat") },

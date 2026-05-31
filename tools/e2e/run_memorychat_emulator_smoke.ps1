@@ -2,7 +2,7 @@
 param(
     [string]$AdbPath = "adb",
     [string]$DeviceId = "",
-    [string]$ApkPath = "app/build/outputs/apk/debug/MemoryChat-v1.0.40-debug.apk",
+    [string]$ApkPath = "app/build/outputs/apk/debug/MemoryChat-v1.0.41-debug.apk",
     [string]$PackageName = "com.memorychat.app",
     [string]$Receiver = "com.memorychat.app/.AdbInputReceiver",
     [string]$Action = "com.memorychat.app.SEND_MESSAGE",
@@ -193,12 +193,13 @@ Write-Host "Clearing logcat..."
 Invoke-Adb -Args @("logcat", "-c")
 
 Write-Host "Sending smoke message through broadcast receiver..."
+$encodedMessage = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($Message))
 $broadcastCommand = @(
     "am broadcast",
     "-a $(ConvertTo-ShellSingleQuoted -Value $Action)",
     "-n $(ConvertTo-ShellSingleQuoted -Value $Receiver)",
     "--es conv_id $(ConvertTo-ShellSingleQuoted -Value $conversationId)",
-    "--es msg $(ConvertTo-ShellSingleQuoted -Value $Message)"
+    "--es msg_b64 $(ConvertTo-ShellSingleQuoted -Value $encodedMessage)"
 ) -join " "
 Invoke-Adb -Args @("shell", $broadcastCommand)
 
@@ -223,8 +224,19 @@ if ($LASTEXITCODE -ne 0) {
     throw "adb logcat export failed with exit code $LASTEXITCODE"
 }
 
+$logText = Get-Content -LiteralPath $logPath -Raw
+if ($logText -match "AdbInput\\(.*\\): Error:" -or
+    $logText -match "LlmProvider\\(.*\\): complete\\(\\) failed" -or
+    $logText -match "Unable to resolve host" -or
+    $logText -match "HTTP \\d{3}") {
+    throw "smoke failed: model/network error found in $logPath"
+}
+if ($logText -notmatch "\\[4/4\\] API response" -or $logText -notmatch "=== DONE") {
+    throw "smoke failed: missing successful API response or completion marker in $logPath"
+}
+
 Write-Host ""
 Write-Host "Smoke command finished."
 Write-Host "Database copy: $dbPath"
 Write-Host "Related logcat: $logPath"
-Write-Host "Inspect the log for AdbInput '[4/4] API response' or errors."
+Write-Host "Verified AdbInput '[4/4] API response' and completion marker."

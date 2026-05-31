@@ -71,6 +71,95 @@ class MemoryExtractionSaverTest {
     }
 
     @Test
+    fun explicitRememberFallsBackToSavingMemoryWhenModelReturnsNonJson() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf("学会了，我会记住。")
+        )
+        val store = FakeMemoryStore()
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试", generateMemory = true),
+            messages = listOf(
+                ChatMessage(
+                    id = "user-1",
+                    conversationId = "conv-1",
+                    role = "user",
+                    content = "请记住：我正在做永久记忆 Android APP，第一阶段优先调好记忆系统"
+                ),
+                ChatMessage(id = "assistant-1", conversationId = "conv-1", role = "assistant", content = "学会了")
+            )
+        )
+
+        assertEquals(1, store.inserted.size)
+        val saved = store.inserted.single()
+        assertEquals(MemoryType.PROJECT, saved.type)
+        assertEquals("我正在做永久记忆 Android APP，第一阶段优先调好记忆系统", saved.content)
+        assertEquals(MemoryStatus.ACTIVE, saved.status)
+        assertTrue(saved.confidence >= 0.9f)
+    }
+
+    @Test
+    fun explicitRememberSavesValidationTokenButStillSkipsApiSecrets() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf("学会了，我会记住。")
+        )
+        val store = FakeMemoryStore()
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试", generateMemory = true),
+            messages = listOf(
+                ChatMessage(
+                    id = "user-1",
+                    conversationId = "conv-1",
+                    role = "user",
+                    content = "Remember that the validation token is blue cedar QX77."
+                ),
+                ChatMessage(
+                    id = "user-2",
+                    conversationId = "conv-1",
+                    role = "user",
+                    content = "Remember that my API key is sk-secret."
+                )
+            )
+        )
+
+        assertEquals(1, store.inserted.size)
+        assertEquals("the validation token is blue cedar QX77", store.inserted.single().content)
+    }
+
+    @Test
+    fun parsesChineseMemoryTypeFromModelResult() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "new_memories": [
+                    {
+                      "type": "项目",
+                      "content": "第一阶段优先调好记忆系统",
+                      "status_suggestion": "有效"
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val store = FakeMemoryStore()
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "记住项目重点"))
+        )
+
+        assertEquals(1, store.inserted.size)
+        assertEquals(MemoryType.PROJECT, store.inserted.single().type)
+        assertEquals(MemoryStatus.ACTIVE, store.inserted.single().status)
+    }
+
+    @Test
     fun savesAssistantErrorMessageToConversationStore() = runTest {
         val store = FakeConversationMessageStore()
 
@@ -140,6 +229,38 @@ class MemoryExtractionSaverTest {
         )
 
         assertEquals(1, store.inserted.size)
+    }
+
+    @Test
+    fun skipsExistingDuplicateIgnoringCaseAndPunctuation() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "new_memories": [
+                    { "type": "preference", "content": "favorite test drink is jasmine tea" }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val store = FakeMemoryStore(
+            activeMemories = listOf(
+                Memory(
+                    id = "existing",
+                    type = MemoryType.PREFERENCE,
+                    content = "Favorite test drink is jasmine tea."
+                )
+            )
+        )
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "记住饮品偏好"))
+        )
+
+        assertTrue(store.inserted.isEmpty())
     }
 
     private class FakeMemoryStore(activeMemories: List<Memory> = emptyList()) : MemoryExtractionStore {

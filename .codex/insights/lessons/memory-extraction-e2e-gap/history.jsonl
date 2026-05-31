@@ -1,0 +1,2 @@
+{"timestamp":"2026-06-01T03:30:00+08:00","source":"user_explicit_feedback","event":"用户反馈：主动记忆提取按了没用，记忆中心看不到，出现学会了后也没有体现记忆，后台自动提取更没有可靠表现。","conclusion":"将记忆提取链路作为端到端缺陷调查；修复必须验证提取、保存、展示和召回闭环。","confidence":80}
+{"timestamp":"2026-06-01T04:02:00+08:00","source":"validation_result","event":"v1.0.41 最终模拟器 ADB 验证通过：Base64 消息输入避免 shell 拆参；显式记忆句写入 ACTIVE memory，后续提问召回并回答 blue cedar QX77。","conclusion":"记忆提取问题的当前修复需同时覆盖模型非 JSON 兜底、中文枚举容错、敏感词不过度过滤、重复去重和稳定 ADB 验证输入。","confidence":95}

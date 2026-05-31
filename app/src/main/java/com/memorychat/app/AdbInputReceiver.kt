@@ -3,17 +3,21 @@ package com.memorychat.app
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Base64
 import android.util.Log
 import com.memorychat.app.data.local.db.AppDatabase
 import com.memorychat.app.data.local.datastore.SettingsDataStore
 import com.memorychat.app.data.local.db.entity.MessageEntity
+import com.memorychat.app.data.repository.MemoryRepository
 import com.memorychat.app.data.repository.PersonaRepository
 import com.memorychat.app.domain.model.ChatMessage
 import com.memorychat.app.domain.model.ChatRequest
+import com.memorychat.app.domain.model.Conversation
 import com.memorychat.app.domain.model.Memory
 import com.memorychat.app.domain.model.MemoryType
-import com.memorychat.app.domain.model.MemoryStatus
 import com.memorychat.app.domain.provider.OpenAICompatibleProvider
+import com.memorychat.app.domain.engine.MemoryExtractionSaver
+import com.memorychat.app.domain.engine.MemoryExtractionStore
 import com.memorychat.app.domain.engine.MemoryEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +37,11 @@ class AdbInputReceiver : BroadcastReceiver() {
             return
         }
         
-        val message = intent.getStringExtra("msg") ?: return
+        val message = intent.getStringExtra("msg")
+            ?: intent.getStringExtra("msg_b64")?.let { encoded ->
+                String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8)
+            }
+            ?: return
         val conversationId = intent.getStringExtra("conv_id") ?: return
 
         Log.i("AdbInput", "=== NEW MESSAGE ===")
@@ -43,6 +51,7 @@ class AdbInputReceiver : BroadcastReceiver() {
         val db = AppDatabase.getInstance(context)
         val ds = SettingsDataStore(context)
         val personaRepo = PersonaRepository(db.personaDao())
+        val memoryRepo = MemoryRepository(db.memoryDao(), db.memoryTombstoneDao())
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -64,34 +73,33 @@ class AdbInputReceiver : BroadcastReceiver() {
 
                 if (apiKey.isNotBlank()) {
                     val provider = OpenAICompatibleProvider(apiKey, baseUrl, model)
-                    val conversation = db.conversationDao().getById(conversationId)
+                    val conversationEntity = db.conversationDao().getById(conversationId)
+                    val conversation = conversationEntity?.let {
+                        Conversation(
+                            id = it.id,
+                            title = it.title,
+                            personaId = it.personaId,
+                            useMemory = it.useMemory == 1,
+                            generateMemory = it.generateMemory == 1,
+                            createdAt = it.createdAt,
+                            updatedAt = it.updatedAt
+                        )
+                    }
                     val persona = conversation?.personaId?.let { personaRepo.getPersona(it) }
-                    if (conversation == null) {
+                    if (conversationEntity == null) {
                         Log.w("AdbInput", "Conversation not found for conv_id=$conversationId")
                     } else {
-                        Log.i("AdbInput", "Conversation persona=${conversation.personaId ?: "none"}")
+                        Log.i("AdbInput", "Conversation persona=${conversation?.personaId ?: "none"}, useMemory=${conversation?.useMemory}, generateMemory=${conversation?.generateMemory}")
                     }
 
                     // === MEMORY RECALL ===
                     Log.i("AdbInput", "[2/4] Memory recall start")
-                    val memoryEntities = db.memoryDao().getActiveMemories()
-                    Log.i("AdbInput", "  DB returned ${memoryEntities.size} active memories")
-                    
-                    val activeMemories = memoryEntities.map { entity ->
-                        Memory(
-                            id = entity.id,
-                            type = MemoryType.valueOf(entity.type),
-                            content = entity.content,
-                            status = MemoryStatus.valueOf(entity.status),
-                            importance = entity.importance,
-                            confidence = entity.confidence,
-                            sourceConversationId = entity.sourceConversationId,
-                            createdAt = entity.createdAt,
-                            updatedAt = entity.updatedAt,
-                            lastUsedAt = entity.lastUsedAt,
-                            userEdited = entity.userEdited == 1
-                        )
+                    val activeMemories = if (conversation?.useMemory != false) {
+                        memoryRepo.getActiveMemories()
+                    } else {
+                        emptyList()
                     }
+                    Log.i("AdbInput", "  DB returned ${activeMemories.size} active memories")
 
                     val messages = mutableListOf<ChatMessage>()
                     var recalledCount = 0
@@ -145,6 +153,39 @@ class AdbInputReceiver : BroadcastReceiver() {
                         createdAt = System.currentTimeMillis()
                     )
                     db.messageDao().insert(assistantMsg)
+                    if (conversation?.generateMemory == true) {
+                        val extractionStore = object : MemoryExtractionStore {
+                            override suspend fun getActiveMemories(): List<Memory> = memoryRepo.getActiveMemories()
+                            override suspend fun isTombstoned(content: String, type: MemoryType): Boolean =
+                                memoryRepo.isTombstoned(content, type)
+                            override suspend fun insert(memory: Memory) = memoryRepo.insert(memory)
+                            override suspend fun getById(id: String): Memory? = memoryRepo.getById(id)
+                            override suspend fun update(memory: Memory) = memoryRepo.update(memory)
+                        }
+                        val extraction = MemoryExtractionSaver(MemoryEngine(provider, model), extractionStore)
+                            .extractAndSave(
+                                conversation,
+                                listOf(
+                                    ChatMessage(
+                                        id = userMsg.id,
+                                        conversationId = conversationId,
+                                        role = "user",
+                                        content = userMsg.content,
+                                        createdAt = userMsg.createdAt
+                                    ),
+                                    ChatMessage(
+                                        id = assistantMsg.id,
+                                        conversationId = conversationId,
+                                        role = "assistant",
+                                        content = assistantMsg.content,
+                                        createdAt = assistantMsg.createdAt
+                                    )
+                                )
+                            )
+                        Log.i("AdbInput", "Extraction: new=${extraction.newMemories.size}, updates=${extraction.updates.size}")
+                    } else {
+                        Log.i("AdbInput", "Extraction skipped: generateMemory=false")
+                    }
                     Log.i("AdbInput", "=== DONE (recall=$recalledCount) ===")
                 } else {
                     Log.w("AdbInput", "API key is empty!")

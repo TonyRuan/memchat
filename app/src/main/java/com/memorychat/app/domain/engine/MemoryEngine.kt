@@ -164,11 +164,11 @@ Output JSON format:
             val newMemories = obj.getAsJsonArray("new_memories")?.map { item ->
                 val o = item.asJsonObject
                 MemoryCandidate(
-                    type = MemoryType.valueOf(o.getString("type", "category")?.uppercase() ?: "PROFILE"),
+                    type = parseMemoryType(o.getString("type", "category")),
                     content = o.getString("content", "text") ?: "",
                     importance = o.get("importance")?.asInt ?: 3,
                     confidence = o.get("confidence")?.asFloat ?: 0.8f,
-                    statusSuggestion = MemoryStatus.valueOf(o.getString("status_suggestion", "status")?.uppercase() ?: "ACTIVE"),
+                    statusSuggestion = parseMemoryStatus(o.getString("status_suggestion", "status")),
                     reason = o.getString("reason") ?: ""
                 )
             } ?: emptyList()
@@ -197,6 +197,29 @@ Output JSON format:
         }
     }
 
+    private fun parseMemoryType(raw: String?): MemoryType {
+        return when (raw?.trim()?.lowercase()) {
+            "profile", "user_profile", "user profile", "画像", "用户画像", "個人", "个人", "用户" -> MemoryType.PROFILE
+            "preference", "preferences", "偏好", "喜好", "习惯", "習慣" -> MemoryType.PREFERENCE
+            "project", "项目", "專案", "工程", "产品", "產品" -> MemoryType.PROJECT
+            "summary", "摘要", "总结", "總結" -> MemoryType.SUMMARY
+            null, "" -> MemoryType.PROFILE
+            else -> runCatching { MemoryType.valueOf(raw.trim().uppercase()) }.getOrDefault(MemoryType.PROFILE)
+        }
+    }
+
+    private fun parseMemoryStatus(raw: String?): MemoryStatus {
+        return when (raw?.trim()?.lowercase()) {
+            "active", "有效", "启用", "啟用", "已确认", "已確認" -> MemoryStatus.ACTIVE
+            "pending", "待确认", "待確認", "候选", "候選" -> MemoryStatus.PENDING
+            "candidate" -> MemoryStatus.CANDIDATE
+            "disabled", "禁用" -> MemoryStatus.DISABLED
+            "deleted", "删除", "刪除" -> MemoryStatus.DELETED
+            null, "" -> MemoryStatus.ACTIVE
+            else -> runCatching { MemoryStatus.valueOf(raw.trim().uppercase()) }.getOrDefault(MemoryStatus.ACTIVE)
+        }
+    }
+
     fun recall(
         userMessage: String,
         allActiveMemories: List<Memory>,
@@ -204,6 +227,12 @@ Output JSON format:
     ): MemoryRecallResult {
         val scene = detectScene(userMessage)
         val recalled = when (scene) {
+            "memory_query" -> {
+                allActiveMemories.filter { it.type == MemoryType.PROJECT }.take(3) +
+                allActiveMemories.filter { it.type == MemoryType.PREFERENCE }.take(3) +
+                allActiveMemories.filter { it.type == MemoryType.PROFILE }.take(2) +
+                allActiveMemories.filter { it.type == MemoryType.SUMMARY }.take(2)
+            }
             "project" -> {
                 allActiveMemories.filter { it.type == MemoryType.PROJECT }.take(3) +
                 allActiveMemories.filter { it.type == MemoryType.SUMMARY }.take(2) +
@@ -230,6 +259,8 @@ Output JSON format:
     private fun detectScene(message: String): String {
         val lower = message.lowercase()
         return when {
+            lower.contains("记忆") || lower.contains("记住") || lower.contains("记得") ||
+            lower.contains("还记得") || lower.contains("remember") || lower.contains("memory") -> "memory_query"
             lower.contains("project") || lower.contains("dev") || lower.contains("code") || lower.contains("app") ||
             lower.contains("项目") || lower.contains("开发") || lower.contains("代码") || lower.contains("应用") -> "project"
             lower.contains("persona") || lower.contains("role") || lower.contains("style") ||

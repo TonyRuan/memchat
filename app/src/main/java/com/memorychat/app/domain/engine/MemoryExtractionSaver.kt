@@ -29,11 +29,22 @@ class MemoryExtractionSaver(
         }
 
         val existing = store.getActiveMemories()
-        val result = engine.extractMemories(messages, existing)
+        val modelResult = engine.extractMemories(messages, existing)
+        val fallbackCandidates = if (modelResult.newMemories.isEmpty() && modelResult.updates.isEmpty()) {
+            explicitMemoryCandidates(messages)
+        } else {
+            emptyList()
+        }
+        val result = if (fallbackCandidates.isNotEmpty()) {
+            AppLogger.i("MemoryExtraction", "Using explicit remember fallback: ${fallbackCandidates.size}")
+            MemoryExtractionResult(newMemories = fallbackCandidates)
+        } else {
+            modelResult
+        }
         AppLogger.i("MemoryExtraction", "Extracted: new=${result.newMemories.size}, updates=${result.updates.size}")
 
         val fallbackSourceIds = messages.map { it.id }
-        val seenNewContents = existing.map { it.content.trim().lowercase() }.toMutableSet()
+        val seenNewContents = existing.map { memoryFingerprint(it.content) }.toMutableSet()
         result.newMemories.forEach { candidate ->
             val content = candidate.content.trim()
             if (content.isBlank()) return@forEach
@@ -41,7 +52,7 @@ class MemoryExtractionSaver(
                 AppLogger.d("MemoryExtraction", "Skipping tombstoned: ${content.take(40)}")
                 return@forEach
             }
-            if (!seenNewContents.add(content.lowercase())) {
+            if (!seenNewContents.add(memoryFingerprint(content))) {
                 AppLogger.d("MemoryExtraction", "Skipping duplicate: ${content.take(40)}")
                 return@forEach
             }
@@ -76,6 +87,74 @@ class MemoryExtractionSaver(
         }
 
         return result
+    }
+
+    private fun explicitMemoryCandidates(messages: List<ChatMessage>): List<com.memorychat.app.domain.model.MemoryCandidate> {
+        return messages
+            .filter { it.role == "user" }
+            .mapNotNull { extractExplicitMemoryContent(it.content) }
+            .filterNot { isSensitiveMemory(it) }
+            .map {
+                com.memorychat.app.domain.model.MemoryCandidate(
+                    type = classifyExplicitMemory(it),
+                    content = it,
+                    importance = 5,
+                    confidence = 0.95f,
+                    statusSuggestion = com.memorychat.app.domain.model.MemoryStatus.ACTIVE,
+                    reason = "explicit remember command"
+                )
+            }
+    }
+
+    private fun extractExplicitMemoryContent(content: String): String? {
+        val trimmed = content.trim()
+        val patterns = listOf(
+            Regex("(?i)please\\s+remember(?:\\s+that)?[:：\\s]+(.+)"),
+            Regex("(?i)remember(?:\\s+that|\\s+this)?[:：\\s]+(.+)"),
+            Regex("请?帮?我?记住[:：\\s]*(.+)"),
+            Regex("记一下[:：\\s]*(.+)"),
+            Regex("以后记得[:：\\s]*(.+)"),
+            Regex("把(.+?)(?:记下来|加入记忆|加到记忆|写入记忆|存到记忆)")
+        )
+
+        val raw = patterns.firstNotNullOfOrNull { pattern ->
+            pattern.find(trimmed)?.groupValues?.getOrNull(1)
+        } ?: return null
+
+        return raw
+            .trim()
+            .trim('。', '.', '，', ',', '：', ':', '"', '\'', '“', '”')
+            .takeIf { it.isNotBlank() }
+    }
+
+    private fun classifyExplicitMemory(content: String): MemoryType {
+        val lower = content.lowercase()
+        return when {
+            lower.contains("项目") || lower.contains("app") || lower.contains("android") ||
+                lower.contains("开发") || lower.contains("代码") || lower.contains("prd") ||
+                lower.contains("第一阶段") || lower.contains("产品") -> MemoryType.PROJECT
+            lower.contains("偏好") || lower.contains("喜欢") || lower.contains("习惯") ||
+                lower.contains("prefer") || lower.contains("尽量") || lower.contains("希望你") -> MemoryType.PREFERENCE
+            lower.contains("我叫") || lower.contains("我是") || lower.contains("我的名字") ||
+                lower.contains("我在") || lower.contains("我住") -> MemoryType.PROFILE
+            else -> MemoryType.SUMMARY
+        }
+    }
+
+    private fun isSensitiveMemory(content: String): Boolean {
+        val lower = content.lowercase()
+        val obviousSecret = listOf("api key", "apikey", "password", "secret", "sk-", "密码", "密钥")
+            .any { lower.contains(it) }
+        val credentialToken = Regex("\\b(api|access|refresh|auth|bearer)\\s+token\\b").containsMatchIn(lower)
+        return obviousSecret || credentialToken
+    }
+
+    private fun memoryFingerprint(content: String): String {
+        return content
+            .lowercase()
+            .replace(Regex("[\\p{Punct}，。！？；：“”‘’、（）【】《》]"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
     }
 }
 

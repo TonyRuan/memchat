@@ -34,6 +34,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _lastRecallResult = MutableStateFlow<MemoryRecallResult?>(null)
     val lastRecallResult: StateFlow<MemoryRecallResult?> = _lastRecallResult
 
+    private val _memoryExtractionStatus = MutableStateFlow<String?>(null)
+    val memoryExtractionStatus: StateFlow<String?> = _memoryExtractionStatus
+
     private var llmProvider: OpenAICompatibleProvider? = null
     private var memoryEngine: MemoryEngine? = null
     private var streamJob: Job? = null
@@ -169,9 +172,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun extractMemories() {
-        val engine = memoryEngine ?: return
-        val conv = _conversation.value ?: return
-        if (!conv.generateMemory) return
+        val engine = memoryEngine
+        val conv = _conversation.value
+        if (engine == null) {
+            _memoryExtractionStatus.value = "模型配置未就绪，无法整理记忆"
+            return
+        }
+        if (conv == null) {
+            _memoryExtractionStatus.value = "会话未加载，无法整理记忆"
+            return
+        }
+        if (!conv.generateMemory) {
+            _memoryExtractionStatus.value = "当前会话已关闭生成记忆"
+            return
+        }
 
         AppLogger.i("ChatVM", "Extracting memories...")
         viewModelScope.launch {
@@ -179,7 +193,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val freshMessages = app.conversationRepo.getMessages(conv.id)
             _messages.value = freshMessages
             AppLogger.i("ChatVM", "Reloaded ${freshMessages.size} messages for extraction")
-            extractMemoriesForMessages(engine, conv, freshMessages)
+            val result = extractMemoriesForMessages(engine, conv, freshMessages)
+            _memoryExtractionStatus.value = if (result.newMemories.isNotEmpty() || result.updates.isNotEmpty()) {
+                "记忆整理完成：新增 ${result.newMemories.size} 条，更新 ${result.updates.size} 条"
+            } else {
+                "没有提取到新的长期记忆"
+            }
         }
     }
 
@@ -187,12 +206,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         engine: MemoryEngine,
         conv: Conversation,
         messages: List<ChatMessage>
-    ) {
-        try {
+    ): MemoryExtractionResult {
+        return try {
             MemoryExtractionSaver(engine, memoryExtractionStore()).extractAndSave(conv, messages)
         } catch (e: Exception) {
             AppLogger.e("ChatVM", "Memory extraction failed without blocking chat: ${e.message}")
+            MemoryExtractionResult()
         }
+    }
+
+    fun clearMemoryExtractionStatus() {
+        _memoryExtractionStatus.value = null
     }
 
     private fun memoryExtractionStore(): MemoryExtractionStore {
