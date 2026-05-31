@@ -1,5 +1,23 @@
 # MemoryChat Development Log
 
+## v1.0.36 (2026-06-01)
+
+### Changes
+- Added a tested memory extraction saver for persisting LLM extraction results
+- Wired completed assistant turns to automatically trigger memory extraction when `generateMemory` is enabled
+- Reused the same extraction saver for manual memory organization
+- Persisted assistant error messages when streaming fails before any assistant content is produced
+
+### Verification
+- `.\gradlew.bat test`
+- `.\gradlew.bat connectedDebugAndroidTest`
+- `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.36-debug.apk`
+
+---
+
 ## v1.0.35 (2026-06-01)
 
 ### Changes

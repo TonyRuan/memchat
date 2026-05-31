@@ -6,6 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.memorychat.app.MemoryChatApp
 import com.memorychat.app.domain.model.*
 import com.memorychat.app.domain.provider.OpenAICompatibleProvider
+import com.memorychat.app.domain.engine.ChatTurnErrorPersister
+import com.memorychat.app.domain.engine.ConversationMessageStore
+import com.memorychat.app.domain.engine.MemoryExtractionSaver
+import com.memorychat.app.domain.engine.MemoryExtractionStore
 import com.memorychat.app.domain.engine.MemoryEngine
 import com.memorychat.app.util.AppLogger
 import kotlinx.coroutines.Job
@@ -107,6 +111,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                 app.conversationRepo.saveMessage(assistantMsg)
                                 _messages.value = _messages.value + assistantMsg
                                 AppLogger.d("ChatVM", "Message saved to DB and added to list")
+                                memoryEngine?.let { engine ->
+                                    extractMemoriesForMessages(engine, conv, listOf(userMsg, assistantMsg))
+                                }
                             }
                             _streamingContent.value = ""
                             accumulated = ""
@@ -122,7 +129,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         app.conversationRepo.saveMessage(assistantMsg)
                         _messages.value = _messages.value + assistantMsg
                     } else {
-                        _messages.value = _messages.value + ChatMessage(conversationId = conv.id, role = "assistant", content = "Error: ${e.message}")
+                        val errorMsg = ChatTurnErrorPersister(conversationMessageStore())
+                            .persistAssistantError(conv.id, e.message)
+                        _messages.value = _messages.value + errorMsg
                     }
                     _streamingContent.value = ""
                 } finally {
@@ -170,33 +179,46 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val freshMessages = app.conversationRepo.getMessages(conv.id)
             _messages.value = freshMessages
             AppLogger.i("ChatVM", "Reloaded ${freshMessages.size} messages for extraction")
-            
-            val existing = app.memoryRepo.getActiveMemories()
-            val result = engine.extractMemories(freshMessages, existing)
-            AppLogger.i("ChatVM", "Extracted: new=${result.newMemories.size}, updates=${result.updates.size}")
+            extractMemoriesForMessages(engine, conv, freshMessages)
+        }
+    }
 
-            result.newMemories.forEach { candidate ->
-                if (candidate.content.isBlank()) return@forEach
-                if (app.memoryRepo.isTombstoned(candidate.content, candidate.type)) {
-                    AppLogger.d("ChatVM", "Skipping tombstoned: ${candidate.content.take(40)}")
-                    return@forEach
-                }
-                // Also skip if duplicate content already exists in active memories
-                if (existing.any { it.content.equals(candidate.content, ignoreCase = true) }) {
-                    AppLogger.d("ChatVM", "Skipping duplicate: ${candidate.content.take(40)}")
-                    return@forEach
-                }
-                app.memoryRepo.insert(Memory(
-                    type = candidate.type, content = candidate.content,
-                    status = candidate.statusSuggestion, importance = candidate.importance,
-                    confidence = candidate.confidence, sourceConversationId = conv.id
-                ))
+    private suspend fun extractMemoriesForMessages(
+        engine: MemoryEngine,
+        conv: Conversation,
+        messages: List<ChatMessage>
+    ) {
+        try {
+            MemoryExtractionSaver(engine, memoryExtractionStore()).extractAndSave(conv, messages)
+        } catch (e: Exception) {
+            AppLogger.e("ChatVM", "Memory extraction failed without blocking chat: ${e.message}")
+        }
+    }
+
+    private fun memoryExtractionStore(): MemoryExtractionStore {
+        return object : MemoryExtractionStore {
+            override suspend fun getActiveMemories(): List<Memory> = app.memoryRepo.getActiveMemories()
+
+            override suspend fun isTombstoned(content: String, type: MemoryType): Boolean {
+                return app.memoryRepo.isTombstoned(content, type)
             }
-            result.updates.forEach { update ->
-                val existing = app.memoryRepo.getById(update.targetMemoryId)
-                if (existing != null) {
-                    app.memoryRepo.update(existing.copy(content = update.newContent, updatedAt = System.currentTimeMillis()))
-                }
+
+            override suspend fun insert(memory: Memory) {
+                app.memoryRepo.insert(memory)
+            }
+
+            override suspend fun getById(id: String): Memory? = app.memoryRepo.getById(id)
+
+            override suspend fun update(memory: Memory) {
+                app.memoryRepo.update(memory)
+            }
+        }
+    }
+
+    private fun conversationMessageStore(): ConversationMessageStore {
+        return object : ConversationMessageStore {
+            override suspend fun saveMessage(message: ChatMessage) {
+                app.conversationRepo.saveMessage(message)
             }
         }
     }
