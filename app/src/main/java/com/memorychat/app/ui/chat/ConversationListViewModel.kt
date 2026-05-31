@@ -28,7 +28,14 @@ class ConversationListViewModel(application: Application) : AndroidViewModel(app
     fun createConversation(title: String = "新会话"): String {
         val conv = Conversation(title = title)
         viewModelScope.launch {
-            app.conversationRepo.saveConversation(conv)
+            // 绑定默认 persona
+            val defaultPersona = app.personaRepo.getDefaultPersona()
+            val convWithPersona = if (defaultPersona != null) {
+                conv.copy(personaId = defaultPersona.id)
+            } else {
+                conv
+            }
+            app.conversationRepo.saveConversation(convWithPersona)
             _conversations.value = app.conversationRepo.getAllConversations()
         }
         return conv.id

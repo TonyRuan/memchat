@@ -68,19 +68,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         AppLogger.i("ChatVM", "Sending: ${content.take(50)}")
 
         viewModelScope.launch {
+            // 加载当前会话绑定的 Persona
+            val persona = conv.personaId?.let { app.personaRepo.getPersona(it) }
+            AppLogger.i("ChatVM", "Persona loaded: ${persona?.name ?: "none"}")
+
             val userMsg = ChatMessage(conversationId = conv.id, role = "user", content = content)
             app.conversationRepo.saveMessage(userMsg)
             _messages.value = _messages.value + userMsg
 
             val memories = if (conv.useMemory) {
                 val activeMemories = app.memoryRepo.getActiveMemories()
-                val recall = memoryEngine?.recall(content, activeMemories, null)
+                val recall = memoryEngine?.recall(content, activeMemories, persona)
                 _lastRecallResult.value = recall
                 AppLogger.i("ChatVM", "Recall: scene=${recall?.scene}, count=${recall?.memories?.size}")
                 recall?.memories ?: emptyList()
             } else emptyList()
 
-            val systemPrompt = buildSystemPrompt(memories)
+            val systemPrompt = buildSystemPrompt(memories, persona)
             val allMessages = _messages.value.map { ChatMessage(role = it.role, content = it.content) }.toMutableList()
             if (systemPrompt.isNotBlank()) {
                 allMessages.add(0, ChatMessage(role = "system", content = systemPrompt))
@@ -144,10 +148,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun buildSystemPrompt(memories: List<Memory>): String {
-        if (memories.isEmpty()) return ""
+    private fun buildSystemPrompt(memories: List<Memory>, persona: Persona? = null): String {
+        if (memories.isEmpty() && persona == null) return ""
         return MemoryEngine.buildRecallPrompt(
-            persona = null,
+            persona = persona,
             preferences = memories.filter { it.type == MemoryType.PREFERENCE },
             profile = memories.filter { it.type == MemoryType.PROFILE },
             projects = memories.filter { it.type == MemoryType.PROJECT },
