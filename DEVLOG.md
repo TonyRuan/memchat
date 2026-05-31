@@ -1,5 +1,24 @@
 # MemoryChat Development Log
 
+## v1.0.37 (2026-06-01)
+
+### Changes
+- Moved memory delete/disable tombstone creation into `MemoryRepository`
+- Made tombstone checks type-scoped so identical text in different memory categories is handled deliberately
+- Added repository tests for disabled/deleted memory tombstones
+- Expanded memory source dialog to show saved source message IDs
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.data.repository.RepositoriesTest"`
+- `.\gradlew.bat test`
+- `.\gradlew.bat connectedDebugAndroidTest`
+- `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.37-debug.apk`
+
+---
+
 ## v1.0.36 (2026-06-01)
 
 ### Changes

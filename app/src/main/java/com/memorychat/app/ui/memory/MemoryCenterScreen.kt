@@ -93,7 +93,6 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
                         onDelete = {
                             scope.launch {
                                 app.memoryRepo.delete(memory.id)
-                                app.memoryRepo.addTombstone(memory, "user_deleted")
                                 memories = app.memoryRepo.getAllMemories()
                             }
                         },
@@ -170,6 +169,13 @@ fun MemoryCard(
                     if (memory.sourceMessageIds.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("来源消息数: ${memory.sourceMessageIds.size}")
+                        memory.sourceMessageIds.take(6).forEach { id ->
+                            Text(
+                                text = id,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             },

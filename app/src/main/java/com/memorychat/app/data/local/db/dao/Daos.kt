@@ -71,8 +71,8 @@ interface MemoryDao {
 
 @Dao
 interface MemoryTombstoneDao {
-    @Query("SELECT * FROM memory_tombstones WHERE contentFingerprint = :fingerprint")
-    suspend fun getByFingerprint(fingerprint: String): MemoryTombstoneEntity?
+    @Query("SELECT * FROM memory_tombstones WHERE contentFingerprint = :fingerprint AND memoryType = :memoryType LIMIT 1")
+    suspend fun getByFingerprintAndType(fingerprint: String, memoryType: String): MemoryTombstoneEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: MemoryTombstoneEntity)

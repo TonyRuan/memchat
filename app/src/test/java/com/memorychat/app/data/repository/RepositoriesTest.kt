@@ -141,7 +141,7 @@ class RepositoriesTest {
     fun importMemoriesJsonSkipsTombstonedMemory() = runBlocking {
         val memoryDao = FakeMemoryDao()
         val tombstoneDao = FakeMemoryTombstoneDao().apply {
-            tombstone("不要使用猫娘语气")
+            tombstone("不要使用猫娘语气", MemoryType.PREFERENCE)
         }
         val service = ExportImportService(MemoryRepository(memoryDao, tombstoneDao), PersonaRepository(FakePersonaDao()))
         val json = """
@@ -157,6 +157,45 @@ class RepositoriesTest {
         assertEquals(0, result.imported)
         assertEquals(1, result.skipped)
         assertTrue(memoryDao.memories.isEmpty())
+    }
+
+    @Test
+    fun disabledMemoryCreatesTypeScopedTombstone() = runBlocking {
+        val memoryDao = FakeMemoryDao().apply {
+            insert(MemoryEntity(
+                id = "m1",
+                type = MemoryType.PREFERENCE.name,
+                content = "不要使用猫娘语气",
+                status = MemoryStatus.ACTIVE.name
+            ))
+        }
+        val tombstoneDao = FakeMemoryTombstoneDao()
+        val repo = MemoryRepository(memoryDao, tombstoneDao)
+
+        repo.disable("m1")
+
+        assertEquals(MemoryStatus.DISABLED.name, memoryDao.getById("m1")?.status)
+        assertTrue(repo.isTombstoned("不要使用猫娘语气", MemoryType.PREFERENCE))
+        assertFalse(repo.isTombstoned("不要使用猫娘语气", MemoryType.PROJECT))
+    }
+
+    @Test
+    fun deletedMemoryCreatesTypeScopedTombstone() = runBlocking {
+        val memoryDao = FakeMemoryDao().apply {
+            insert(MemoryEntity(
+                id = "m1",
+                type = MemoryType.PROJECT.name,
+                content = "第一阶段优先调好记忆系统",
+                status = MemoryStatus.ACTIVE.name
+            ))
+        }
+        val repo = MemoryRepository(memoryDao, FakeMemoryTombstoneDao())
+
+        repo.delete("m1")
+
+        assertEquals(MemoryStatus.DELETED.name, memoryDao.getById("m1")?.status)
+        assertTrue(repo.isTombstoned("第一阶段优先调好记忆系统", MemoryType.PROJECT))
+        assertFalse(repo.isTombstoned("第一阶段优先调好记忆系统", MemoryType.PREFERENCE))
     }
 
     @Test
@@ -253,21 +292,21 @@ class RepositoriesTest {
     private class FakeMemoryTombstoneDao : MemoryTombstoneDao {
         private val tombstones = LinkedHashMap<String, MemoryTombstoneEntity>()
 
-        override suspend fun getByFingerprint(fingerprint: String): MemoryTombstoneEntity? {
-            return tombstones[fingerprint]
+        override suspend fun getByFingerprintAndType(fingerprint: String, memoryType: String): MemoryTombstoneEntity? {
+            return tombstones["$memoryType:$fingerprint"]
         }
 
         override suspend fun insert(entity: MemoryTombstoneEntity) {
-            tombstones[entity.contentFingerprint] = entity
+            tombstones["${entity.memoryType}:${entity.contentFingerprint}"] = entity
         }
 
-        fun tombstone(content: String) {
+        fun tombstone(content: String, type: MemoryType) {
             val fingerprint = java.security.MessageDigest.getInstance("MD5")
                 .digest(content.trim().lowercase().toByteArray())
                 .joinToString("") { "%02x".format(it) }
-            tombstones[fingerprint] = MemoryTombstoneEntity(
+            tombstones["${type.name}:$fingerprint"] = MemoryTombstoneEntity(
                 id = "t-$fingerprint",
-                memoryType = MemoryType.PREFERENCE.name,
+                memoryType = type.name,
                 contentFingerprint = fingerprint
             )
         }

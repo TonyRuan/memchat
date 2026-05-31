@@ -53,8 +53,20 @@ class MemoryRepository(private val memoryDao: MemoryDao, private val tombstoneDa
     suspend fun getByType(type: MemoryType) = memoryDao.getByType(type.name).map { it.toDomain() }
     suspend fun insert(memory: Memory) = memoryDao.insert(memory.toEntity())
     suspend fun update(memory: Memory) = memoryDao.update(memory.toEntity())
-    suspend fun disable(memoryId: String) = memoryDao.updateStatus(memoryId, MemoryStatus.DISABLED.name)
-    suspend fun delete(memoryId: String) = memoryDao.updateStatus(memoryId, MemoryStatus.DELETED.name)
+    suspend fun disable(memoryId: String) {
+        val memory = getById(memoryId)
+        memoryDao.updateStatus(memoryId, MemoryStatus.DISABLED.name)
+        if (memory != null) {
+            addTombstone(memory, "user_disabled")
+        }
+    }
+    suspend fun delete(memoryId: String) {
+        val memory = getById(memoryId)
+        memoryDao.updateStatus(memoryId, MemoryStatus.DELETED.name)
+        if (memory != null) {
+            addTombstone(memory, "user_deleted")
+        }
+    }
 
     suspend fun addTombstone(memory: Memory, reason: String? = null) {
         val fingerprint = md5(memory.content.trim().lowercase())
@@ -68,7 +80,7 @@ class MemoryRepository(private val memoryDao: MemoryDao, private val tombstoneDa
 
     suspend fun isTombstoned(content: String, type: MemoryType): Boolean {
         val fingerprint = md5(content.trim().lowercase())
-        return tombstoneDao.getByFingerprint(fingerprint) != null
+        return tombstoneDao.getByFingerprintAndType(fingerprint, type.name) != null
     }
 
     private fun md5(input: String): String {
