@@ -24,7 +24,8 @@ class AdbInputReceiver : BroadcastReceiver() {
         val message = intent.getStringExtra("msg") ?: return
         val conversationId = intent.getStringExtra("conv_id") ?: return
 
-        Log.i("AdbInput", "Received: msg=$message, conv=$conversationId")
+        Log.i("AdbInput", "=== NEW MESSAGE ===")
+        Log.i("AdbInput", "msg=${message.take(50)}, conv=$conversationId")
 
         val pendingResult = goAsync()
         val db = AppDatabase.getInstance(context)
@@ -41,19 +42,21 @@ class AdbInputReceiver : BroadcastReceiver() {
                     createdAt = System.currentTimeMillis()
                 )
                 db.messageDao().insert(userMsg)
-                Log.i("AdbInput", "User message saved")
+                Log.i("AdbInput", "[1/4] User message saved")
 
                 // Get API settings
                 val apiKey = ds.apiKey.first()
                 val baseUrl = ds.baseUrl.first()
                 val model = ds.modelName.first()
-                Log.i("AdbInput", "API config: model=$model, key=${apiKey.take(8)}...")
 
                 if (apiKey.isNotBlank()) {
                     val provider = OpenAICompatibleProvider(apiKey, baseUrl, model)
 
-                    // Memory recall
+                    // === MEMORY RECALL ===
+                    Log.i("AdbInput", "[2/4] Memory recall start")
                     val memoryEntities = db.memoryDao().getActiveMemories()
+                    Log.i("AdbInput", "  DB returned ${memoryEntities.size} active memories")
+                    
                     val activeMemories = memoryEntities.map { entity ->
                         Memory(
                             id = entity.id,
@@ -71,10 +74,17 @@ class AdbInputReceiver : BroadcastReceiver() {
                     }
 
                     val messages = mutableListOf<ChatMessage>()
+                    var recalledCount = 0
 
                     if (activeMemories.isNotEmpty()) {
                         val memoryEngine = MemoryEngine(provider, model)
                         val recall = memoryEngine.recall(message, activeMemories, null)
+                        recalledCount = recall.memories.size
+                        Log.i("AdbInput", "  Recall: scene=${recall.scene}, matched=$recalledCount")
+                        
+                        recall.memories.forEach { mem ->
+                            Log.i("AdbInput", "  -> [${mem.type}] ${mem.content.take(50)}")
+                        }
 
                         if (recall.memories.isNotEmpty()) {
                             val systemPrompt = MemoryEngine.buildRecallPrompt(
@@ -86,17 +96,17 @@ class AdbInputReceiver : BroadcastReceiver() {
                             )
                             if (systemPrompt.isNotBlank()) {
                                 messages.add(ChatMessage(role = "system", content = systemPrompt))
+                                Log.i("AdbInput", "  System prompt injected (${systemPrompt.length} chars)")
                             }
-                            Log.i("AdbInput", "Recalled ${recall.memories.size} memories, scene=${recall.scene}")
-                        } else {
-                            Log.i("AdbInput", "No relevant memories recalled")
                         }
                     } else {
-                        Log.i("AdbInput", "No active memories")
+                        Log.i("AdbInput", "  No memories in DB, skipping recall")
                     }
 
                     messages.add(ChatMessage(role = "user", content = message))
+                    Log.i("AdbInput", "[3/4] Calling API with ${messages.size} messages (recall=$recalledCount)")
 
+                    // === API CALL ===
                     val response = provider.complete(
                         ChatRequest(
                             messages = messages,
@@ -104,8 +114,9 @@ class AdbInputReceiver : BroadcastReceiver() {
                             stream = false
                         )
                     )
-                    Log.i("AdbInput", "API response: ${response.content.take(50)}")
+                    Log.i("AdbInput", "[4/4] API response: ${response.content.take(80)}")
 
+                    // Save assistant message
                     val assistantMsg = MessageEntity(
                         id = java.util.UUID.randomUUID().toString(),
                         conversationId = conversationId,
@@ -114,7 +125,7 @@ class AdbInputReceiver : BroadcastReceiver() {
                         createdAt = System.currentTimeMillis()
                     )
                     db.messageDao().insert(assistantMsg)
-                    Log.i("AdbInput", "Assistant message saved")
+                    Log.i("AdbInput", "=== DONE (recall=$recalledCount) ===")
                 } else {
                     Log.w("AdbInput", "API key is empty!")
                 }
