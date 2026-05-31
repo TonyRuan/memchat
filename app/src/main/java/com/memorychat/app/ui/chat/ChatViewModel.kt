@@ -27,6 +27,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _conversation = MutableStateFlow<Conversation?>(null)
     val conversation: StateFlow<Conversation?> = _conversation
 
+    private val _lastRecallResult = MutableStateFlow<MemoryRecallResult?>(null)
+    val lastRecallResult: StateFlow<MemoryRecallResult?> = _lastRecallResult
+
     private var llmProvider: OpenAICompatibleProvider? = null
     private var memoryEngine: MemoryEngine? = null
     private var streamJob: Job? = null
@@ -72,6 +75,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val memories = if (conv.useMemory) {
                 val activeMemories = app.memoryRepo.getActiveMemories()
                 val recall = memoryEngine?.recall(content, activeMemories, null)
+                _lastRecallResult.value = recall
                 AppLogger.i("ChatVM", "Recall: scene=${recall?.scene}, count=${recall?.memories?.size}")
                 recall?.memories ?: emptyList()
             } else emptyList()
@@ -191,10 +195,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _messages.value = _messages.value.filter { it.id != messageId }
         }
     }
+
+    fun updateConversationSettings(useMemory: Boolean, generateMemory: Boolean) {
+        val conv = _conversation.value ?: return
+        viewModelScope.launch {
+            val updated = conv.copy(useMemory = useMemory, generateMemory = generateMemory, updatedAt = System.currentTimeMillis())
+            app.conversationRepo.saveConversation(updated)
+            _conversation.value = updated
+            AppLogger.i("ChatVM", "Updated settings: useMemory=$useMemory, generateMemory=$generateMemory")
+        }
+    }
 }
-
-
-
-
-
-

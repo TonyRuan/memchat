@@ -46,20 +46,20 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
         memories = app.memoryRepo.getAllMemories()
     }
 
-    val tabs = listOf("全部", "画像", "偏好", "项目", "摘要", "待确认")
+    val tabs = listOf("ȫ��", "����", "ƫ��", "��Ŀ", "ժҪ", "��ȷ��")
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("记忆中心") },
+                title = { Text("��������") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "����")
                     }
                 },
                 actions = {
                     IconButton(onClick = { showAddDialog = true }) {
-                        Icon(Icons.Default.Add, "添加记忆")
+                        Icon(Icons.Default.Add, "���Ӽ���")
                     }
                 }
             )
@@ -152,6 +152,33 @@ fun MemoryCard(
     onDelete: () -> Unit,
     onToggleStatus: () -> Unit
 ) {
+    var showSourceDialog by remember { mutableStateOf(false) }
+
+    // Source dialog
+    if (showSourceDialog) {
+        AlertDialog(
+            onDismissRequest = { showSourceDialog = false },
+            title = { Text("查看来源") },
+            text = {
+                Column {
+                    Text("来源会话 ID:")
+                    Text(
+                        text = memory.sourceConversationId ?: "未知",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (memory.sourceMessageIds.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("来源消息数: ${memory.sourceMessageIds.size}")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSourceDialog = false }) { Text("关闭") }
+            }
+        )
+    }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -178,6 +205,9 @@ fun MemoryCard(
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Default.Edit, "编辑", modifier = Modifier.size(18.dp))
+                }
+                IconButton(onClick = { showSourceDialog = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Source, "查看来源", modifier = Modifier.size(18.dp))
                 }
                 IconButton(onClick = onToggleStatus, modifier = Modifier.size(32.dp)) {
                     Icon(
@@ -254,5 +284,3 @@ fun AddMemoryDialog(onDismiss: () -> Unit, onSave: (MemoryType, String) -> Unit)
         }
     )
 }
-
-

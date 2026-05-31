@@ -187,20 +187,13 @@ Output JSON format:
     private fun detectScene(message: String): String {
         val lower = message.lowercase()
         return when {
-            lower.contains("project") || lower.contains("dev") || lower.contains("code") || lower.contains("app") -> "project"
-            lower.contains("persona") || lower.contains("role") || lower.contains("style") -> "persona"
-            lower.contains("prefer") || lower.contains("like") || lower.contains("habit") -> "preference"
+            lower.contains("project") || lower.contains("dev") || lower.contains("code") || lower.contains("app") ||
+            lower.contains("项目") || lower.contains("开发") || lower.contains("代码") || lower.contains("应用") -> "project"
+            lower.contains("persona") || lower.contains("role") || lower.contains("style") ||
+            lower.contains("角色") || lower.contains("风格") -> "persona"
+            lower.contains("prefer") || lower.contains("like") || lower.contains("habit") ||
+            lower.contains("偏好") || lower.contains("喜欢") || lower.contains("习惯") -> "preference"
             else -> "general"
         }
     }
 }
-
-
-
-
-
-
-
-
-
-

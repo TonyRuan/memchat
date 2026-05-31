@@ -38,6 +38,7 @@ fun ChatScreen(
 
     var inputText by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<ChatMessage?>(null) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(conversationId) {
         viewModel.loadConversation(conversationId)
@@ -66,6 +67,61 @@ fun ChatScreen(
         )
     }
 
+    // Session settings dialog
+    if (showSettingsDialog) {
+        var useMemory by remember { mutableStateOf(conversation?.useMemory ?: true) }
+        var generateMemory by remember { mutableStateOf(conversation?.generateMemory ?: true) }
+
+        // Sync state when conversation changes
+        LaunchedEffect(conversation) {
+            conversation?.let {
+                useMemory = it.useMemory
+                generateMemory = it.generateMemory
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showSettingsDialog = false },
+            title = { Text("会话设置") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("使用记忆", style = MaterialTheme.typography.bodyLarge)
+                            Text("发送消息时召回长期记忆", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = useMemory, onCheckedChange = { useMemory = it })
+                    }
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("生成记忆", style = MaterialTheme.typography.bodyLarge)
+                            Text("从对话中自动提取记忆", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = generateMemory, onCheckedChange = { generateMemory = it })
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.updateConversationSettings(useMemory, generateMemory)
+                    showSettingsDialog = false
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSettingsDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -76,6 +132,9 @@ fun ChatScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showSettingsDialog = true }) {
+                        Icon(Icons.Default.Settings, "Session Settings")
+                    }
                     IconButton(onClick = onNavigateToDebug) {
                         Icon(Icons.Default.BugReport, "Debug")
                     }
