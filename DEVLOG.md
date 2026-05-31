@@ -168,3 +168,63 @@ MiMo model uses separate reasoning_content field that consumes max_tokens. Must 
 - **LogScreen**: Fixed key collision crash — switched to index-based keys
 - **AppLogger**: Added synchronized blocks for thread-safe log operations
 - **AppLogger**: Made export function thread-safe with snapshot
+
+---
+
+## v1.0.23 (2026-05-31 21:40)
+
+### Changes
+- Added API key setter broadcast for testing: m broadcast --es set_api_key 'xxx'
+- Pushed to GitHub: git@github.com:TonyRuan/memchat.git
+
+## v1.0.22 (2026-05-31 21:23)
+
+### PRD Compliance Fixes
+- **API Key 加密存储**: 使用 EncryptedSharedPreferences 替代明文 DataStore
+- **查看来源**: MemoryCenterScreen 添加"查看来源"按钮
+- **会话级设置**: ChatScreen 添加 useMemory/generateMemory 开关
+- **Debug 召回详情**: DebugScreen 显示最近一次 recall 结果
+- **中文场景检测**: MemoryEngine.detectScene() 添加中文关键词
+- **导出写文件**: SettingsScreen 导出时写入文件并分享
+
+## v1.0.21 (2026-05-31 21:07)
+
+### P0 Fixes
+- **自动提取记忆**: sendMessage 完成后自动调用 extractMemories()
+- **userEdited 保护**: 编辑过的记忆不会被自动覆盖
+- **API Key 遮罩**: 设置页 API Key 使用密码输入样式
+- **sourceMessageIds**: 提取记忆时传递来源消息 ID
+- **禁用记忆 Tab**: 记忆中心添加"禁用"分页
+
+## v1.0.20 (2026-05-31 20:50)
+
+### Fixes
+- MemoryCenterScreen 每次进入刷新（ON_RESUME 生命周期）
+- PROFILE 召回数量 take(1) -> take(3)
+
+## v1.0.19 (2026-05-31 20:25)
+
+### Memory Pipeline Logging
+- AdbInputReceiver 添加记忆召回日志锚点
+- 跨会话记忆测试通过
+
+## v1.0.18 (2026-05-31 20:10)
+
+### Memory System Fixes
+- MemoryDao 查询 'active' -> 'ACTIVE'（SQLite 区分大小写）
+- AdbInputReceiver 加入记忆召回逻辑
+- 提取前重新加载消息
+
+## v1.0.15-v1.0.17
+
+### Fixes
+- JsonNull 静默处理
+- LogScreen 闪退修复（remember + stable keys）
+- 版本号修正
+
+## v1.0.12-v1.0.14
+
+### Fixes
+- JSON null 错误修复
+- 流式响应解析容错
+- API 地址修正为 api.xiaomimimo.com
