@@ -1,5 +1,56 @@
 # MemoryChat Development Log
 
+## v1.0.40 (2026-06-01)
+
+### Changes
+- Made non-streaming provider calls throw on HTTP, network, parse, or unexpected response failures instead of returning empty content
+- Added provider tests so ADB and memory extraction callers cannot mistake failed model calls for successful empty replies
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.provider.OpenAICompatibleProviderTest"`
+- `.\gradlew.bat test`
+- `.\gradlew.bat connectedDebugAndroidTest`
+- `.\gradlew.bat assembleDebug`
+- Manual ADB smoke on `emulator-5554`: debug receiver accepted `SEND_MESSAGE`; emulator DNS still failed for `api.xiaomimimo.com`; ADB path saved an explicit assistant error instead of an empty response
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.40-debug.apk`
+
+---
+
+## v1.0.39 (2026-06-01)
+
+### Changes
+- Fixed chat input layout so the message box and send button avoid the soft keyboard
+- Added an instrumentation regression test for the new-chat save-before-navigation flow
+- Exported the ADB input receiver only for debug builds so emulator smoke scripts can actually deliver broadcasts
+- Documented emulator dialogue findings: previous send failure was `conv=null`, and the current emulator network cannot resolve the model host
+
+### Verification
+- `.\gradlew.bat test`
+- `.\gradlew.bat connectedDebugAndroidTest`
+- `.\gradlew.bat assembleDebug`
+- Manual emulator dialogue smoke on `emulator-5554`: new chat opened as `新会话`, keyboard no longer covered send, sending reached `ChatVM`, model call failed at emulator DNS with `Unable to resolve host "api.xiaomimimo.com"`, and the assistant error message was persisted
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.39-debug.apk`
+
+---
+
+## v1.0.38 (2026-06-01)
+
+### Changes
+- Fixed new conversation navigation race so chat opens only after the conversation is saved with defaults
+- Verified the bug from emulator logs where send failed with `conv=null`
+
+### Verification
+- Pending
+
+### APK
+- Pending
+
+---
+
 ## v1.0.37 (2026-06-01)
 
 ### Changes

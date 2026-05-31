@@ -132,7 +132,12 @@ class OpenAICompatibleProvider(
 
             val response = client.newCall(httpRequest).execute()
             val responseBody = response.body?.string() ?: "{}"
+            val code = response.code
             response.close()
+
+            if (code !in 200..299) {
+                throw IllegalStateException("HTTP $code: ${responseBody.take(200)}")
+            }
 
             try {
                 val json = JsonParser.parseString(responseBody).asJsonObject
@@ -145,14 +150,14 @@ class OpenAICompatibleProvider(
                     }
                 }
                 AppLogger.w("LlmProvider", "Unexpected response format: ${responseBody.take(200)}")
-                ChatResponse(content = "")
+                throw IllegalStateException("Unexpected response format")
             } catch (e: Exception) {
                 AppLogger.e("LlmProvider", "Parse error: ${e.message}")
-                ChatResponse(content = "")
+                throw IllegalStateException("Failed to parse completion response", e)
             }
         } catch (e: Exception) {
             AppLogger.e("LlmProvider", "complete() failed: ${e.javaClass.simpleName}: ${e.message}")
-            ChatResponse(content = "")
+            throw e
         }
     }
 }

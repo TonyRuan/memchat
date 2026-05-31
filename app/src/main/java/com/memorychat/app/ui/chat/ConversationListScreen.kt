@@ -46,8 +46,9 @@ fun ConversationListScreen(
         },
         floatingActionButton = {
             FloatingActionButton(onClick = {
-                val id = viewModel.createConversation()
-                onNavigateToChat(id)
+                viewModel.createConversation { id ->
+                    onNavigateToChat(id)
+                }
             }) {
                 Icon(Icons.Default.Add, "New Chat")
             }

@@ -26,7 +26,7 @@ class ConversationListViewModel(application: Application) : AndroidViewModel(app
         }
     }
 
-    fun createConversation(title: String = "新会话"): String {
+    fun createConversation(title: String = "新会话", onCreated: (String) -> Unit) {
         val conv = Conversation(title = title)
         viewModelScope.launch {
             val configuredPersonaId = app.settingsDataStore.defaultPersonaId.first().takeIf { it.isNotBlank() }
@@ -41,8 +41,8 @@ class ConversationListViewModel(application: Application) : AndroidViewModel(app
             )
             app.conversationRepo.saveConversation(convWithDefaults)
             _conversations.value = app.conversationRepo.getAllConversations()
+            onCreated(convWithDefaults.id)
         }
-        return conv.id
     }
 
     fun deleteConversation(id: String) {
