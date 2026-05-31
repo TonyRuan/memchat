@@ -24,7 +24,7 @@ class SettingsDataStore(private val context: Context) {
     val providerType: Flow<String> = context.dataStore.data.map { it[PROVIDER_TYPE] ?: "mimo" }
     val baseUrl: Flow<String> = context.dataStore.data.map { it[BASE_URL] ?: "https://token-plan-cn.xiaomimimo.com/v1" }
     val modelName: Flow<String> = context.dataStore.data.map { it[MODEL_NAME] ?: "mimo-v2.5-pro" }
-    val apiKey: Flow<String> = context.dataStore.data.map { it[API_KEY] ?: "tp-cdsurjo49y178azul4raxq8pm58lgos4gd0x5xth3nbkphde" }
+    val apiKey: Flow<String> = context.dataStore.data.map { it[API_KEY] ?: "sk-cffz76fk8snojt8r0h4wgsrc4s7ot4w8jrv3yzlbyd6f19ku" }
     val defaultUseMemory: Flow<Boolean> = context.dataStore.data.map { it[DEFAULT_USE_MEMORY] ?: true }
     val defaultGenerateMemory: Flow<Boolean> = context.dataStore.data.map { it[DEFAULT_GENERATE_MEMORY] ?: true }
     val defaultPersonaId: Flow<String> = context.dataStore.data.map { it[DEFAULT_PERSONA_ID] ?: "" }
@@ -39,3 +39,5 @@ class SettingsDataStore(private val context: Context) {
     suspend fun saveDefaultPersonaId(value: String) { context.dataStore.edit { it[DEFAULT_PERSONA_ID] = value } }
     suspend fun saveMaxTokens(value: Int) { context.dataStore.edit { it[MAX_TOKENS] = value } }
 }
+
+
