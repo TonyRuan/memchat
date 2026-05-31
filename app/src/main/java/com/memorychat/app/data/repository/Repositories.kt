@@ -141,8 +141,26 @@ class ExportImportService(
             arr.forEach { item ->
                 try {
                     val o = item.asJsonObject
-                    val content = o.get("content")?.asString ?: ""
-                    val type = MemoryType.valueOf(o.get("type")?.asString?.uppercase() ?: "PROFILE")
+                    val content = o.get("content")?.asString?.trim().orEmpty()
+                    if (content.isBlank()) {
+                        skipped++
+                        errors.add("Skipped memory with empty content")
+                        return@forEach
+                    }
+                    val type = try {
+                        MemoryType.valueOf(o.get("type")?.asString?.uppercase() ?: "PROFILE")
+                    } catch (e: Exception) {
+                        skipped++
+                        errors.add("Invalid memory type: ${o.get("type")}")
+                        return@forEach
+                    }
+                    val status = try {
+                        MemoryStatus.valueOf(o.get("status")?.asString?.uppercase() ?: "ACTIVE")
+                    } catch (e: Exception) {
+                        skipped++
+                        errors.add("Invalid memory status: ${o.get("status")}")
+                        return@forEach
+                    }
 
                     if (memoryRepository.isTombstoned(content, type)) {
                         skipped++
@@ -153,7 +171,7 @@ class ExportImportService(
                         id = o.get("id")?.asString ?: java.util.UUID.randomUUID().toString(),
                         type = type,
                         content = content,
-                        status = MemoryStatus.valueOf(o.get("status")?.asString?.uppercase() ?: "ACTIVE"),
+                        status = status,
                         importance = o.get("importance")?.asInt ?: 3,
                         confidence = o.get("confidence")?.asFloat ?: 0.8f
                     )
@@ -215,3 +233,4 @@ class ExportImportService(
         }
     }
 }
+

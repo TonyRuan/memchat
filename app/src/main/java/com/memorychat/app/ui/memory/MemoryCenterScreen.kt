@@ -1,4 +1,4 @@
-﻿package com.memorychat.app.ui.memory
+package com.memorychat.app.ui.memory
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -51,7 +51,7 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("记忆中心") },
+                title = { Text("查看来源") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
@@ -158,7 +158,7 @@ fun MemoryCard(
     if (showSourceDialog) {
         AlertDialog(
             onDismissRequest = { showSourceDialog = false },
-            title = { Text("记忆中心") },
+            title = { Text("查看来源") },
             text = {
                 Column {
                     Text("来源会话 ID:")
@@ -230,7 +230,7 @@ fun EditMemoryDialog(memory: Memory, onDismiss: () -> Unit, onSave: (Memory) -> 
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("记忆中心") },
+        title = { Text("查看来源") },
         text = {
             OutlinedTextField(value = content, onValueChange = { content = it }, modifier = Modifier.fillMaxWidth())
         },
@@ -253,7 +253,7 @@ fun AddMemoryDialog(onDismiss: () -> Unit, onSave: (MemoryType, String) -> Unit)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("记忆中心") },
+        title = { Text("查看来源") },
         text = {
             Column {
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -284,3 +284,4 @@ fun AddMemoryDialog(onDismiss: () -> Unit, onSave: (MemoryType, String) -> Unit)
         }
     )
 }
+
