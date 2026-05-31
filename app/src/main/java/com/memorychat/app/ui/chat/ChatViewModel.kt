@@ -12,6 +12,7 @@ import com.memorychat.app.domain.engine.MemoryExtractionSaver
 import com.memorychat.app.domain.engine.MemoryExtractionStore
 import com.memorychat.app.domain.engine.MemoryEngine
 import com.memorychat.app.util.AppLogger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -40,6 +41,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var llmProvider: OpenAICompatibleProvider? = null
     private var memoryEngine: MemoryEngine? = null
     private var streamJob: Job? = null
+    private val sendGate = GenerationSendGate()
 
     fun loadConversation(conversationId: String) {
         viewModelScope.launch {
@@ -71,92 +73,118 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             AppLogger.e("ChatVM", "Cannot send: provider=$provider, conv=$conv")
             return
         }
+        if (!sendGate.tryStart()) {
+            AppLogger.w("ChatVM", "Ignoring send while generation is active")
+            return
+        }
 
         AppLogger.i("ChatVM", "Sending: ${content.take(50)}")
+        _isGenerating.value = true
+        _streamingContent.value = ""
 
         viewModelScope.launch {
-            // 加载当前会话绑定的 Persona
-            val persona = conv.personaId?.let { app.personaRepo.getPersona(it) }
-            AppLogger.i("ChatVM", "Persona loaded: ${persona?.name ?: "none"}")
+            try {
+                // 加载当前会话绑定的 Persona
+                val persona = conv.personaId?.let { app.personaRepo.getPersona(it) }
+                AppLogger.i("ChatVM", "Persona loaded: ${persona?.name ?: "none"}")
 
-            val userMsg = ChatMessage(conversationId = conv.id, role = "user", content = content)
-            app.conversationRepo.saveMessage(userMsg)
-            _messages.value = _messages.value + userMsg
+                val userMsg = ChatMessage(conversationId = conv.id, role = "user", content = content)
+                app.conversationRepo.saveMessage(userMsg)
+                _messages.value = _messages.value + userMsg
 
-            val memories = if (conv.useMemory) {
-                val activeMemories = app.memoryRepo.getActiveMemories()
-                val recall = memoryEngine?.recall(content, activeMemories, persona)
-                _lastRecallResult.value = recall
-                AppLogger.i("ChatVM", "Recall: scene=${recall?.scene}, count=${recall?.memories?.size}")
-                recall?.memories ?: emptyList()
-            } else emptyList()
+                val memories = if (conv.useMemory) {
+                    val activeMemories = app.memoryRepo.getActiveMemories()
+                    val recall = memoryEngine?.recall(content, activeMemories, persona)
+                    _lastRecallResult.value = recall
+                    AppLogger.i("ChatVM", "Recall: scene=${recall?.scene}, count=${recall?.memories?.size}")
+                    recall?.memories ?: emptyList()
+                } else emptyList()
 
-            val systemPrompt = buildSystemPrompt(memories, persona)
-            val allMessages = _messages.value.map { ChatMessage(role = it.role, content = it.content) }.toMutableList()
-            if (systemPrompt.isNotBlank()) {
-                allMessages.add(0, ChatMessage(role = "system", content = systemPrompt))
-            }
-
-            _isGenerating.value = true
-            _streamingContent.value = ""
-
-            val model = app.settingsDataStore.modelName.first()
-            AppLogger.i("ChatVM", "Starting stream, model=$model")
-
-            streamJob = viewModelScope.launch {
-                var accumulated = ""
-                try {
-                    provider.streamChat(ChatRequest(messages = allMessages, model = model, stream = true)).collect { chunk ->
-                        if (chunk.done) {
-                            AppLogger.i("ChatVM", "Stream done, length=${accumulated.length}")
-                            if (accumulated.isNotBlank()) {
-                                val assistantMsg = ChatMessage(conversationId = conv.id, role = "assistant", content = accumulated)
-                                app.conversationRepo.saveMessage(assistantMsg)
-                                _messages.value = _messages.value + assistantMsg
-                                AppLogger.d("ChatVM", "Message saved to DB and added to list")
-                                memoryEngine?.let { engine ->
-                                    extractMemoriesForMessages(engine, conv, listOf(userMsg, assistantMsg))
-                                }
-                            }
-                            _streamingContent.value = ""
-                            accumulated = ""
-                        } else {
-                            accumulated += chunk.content
-                            _streamingContent.value = accumulated
-                        }
-                    }
-                } catch (e: Exception) {
-                    AppLogger.e("ChatVM", "Stream error: ${e.message}")
-                    if (accumulated.isNotBlank()) {
-                        val assistantMsg = ChatMessage(conversationId = conv.id, role = "assistant", content = accumulated)
-                        app.conversationRepo.saveMessage(assistantMsg)
-                        _messages.value = _messages.value + assistantMsg
-                    } else {
-                        val errorMsg = ChatTurnErrorPersister(conversationMessageStore())
-                            .persistAssistantError(conv.id, e.message)
-                        _messages.value = _messages.value + errorMsg
-                    }
-                    _streamingContent.value = ""
-                } finally {
-                    _isGenerating.value = false
+                val systemPrompt = buildSystemPrompt(memories, persona)
+                val allMessages = _messages.value.map { ChatMessage(role = it.role, content = it.content) }.toMutableList()
+                if (systemPrompt.isNotBlank()) {
+                    allMessages.add(0, ChatMessage(role = "system", content = systemPrompt))
                 }
+
+                val model = app.settingsDataStore.modelName.first()
+                AppLogger.i("ChatVM", "Starting stream, model=$model")
+
+                streamJob = viewModelScope.launch {
+                    var accumulated = ""
+                    try {
+                        provider.streamChat(ChatRequest(messages = allMessages, model = model, stream = true)).collect { chunk ->
+                            if (chunk.done) {
+                                val finalContent = accumulated
+                                AppLogger.i("ChatVM", "Stream done, length=${finalContent.length}")
+                                accumulated = ""
+                                _streamingContent.value = ""
+                                if (finalContent.isNotBlank()) {
+                                    val assistantMsg = ChatMessage(conversationId = conv.id, role = "assistant", content = finalContent)
+                                    app.conversationRepo.saveMessage(assistantMsg)
+                                    _messages.value = _messages.value + assistantMsg
+                                    AppLogger.d("ChatVM", "Message saved to DB and added to list")
+                                    memoryEngine?.let { engine ->
+                                        extractMemoriesForMessages(engine, conv, listOf(userMsg, assistantMsg))
+                                    }
+                                }
+                            } else {
+                                accumulated += chunk.content
+                                _streamingContent.value = accumulated
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        AppLogger.i("ChatVM", "Stream cancelled")
+                        throw e
+                    } catch (e: Exception) {
+                        AppLogger.e("ChatVM", "Stream error: ${e.message}")
+                        val partialContent = accumulated
+                        accumulated = ""
+                        _streamingContent.value = ""
+                        if (partialContent.isNotBlank()) {
+                            val assistantMsg = ChatMessage(conversationId = conv.id, role = "assistant", content = partialContent)
+                            app.conversationRepo.saveMessage(assistantMsg)
+                            _messages.value = _messages.value + assistantMsg
+                        } else {
+                            val errorMsg = ChatTurnErrorPersister(conversationMessageStore())
+                                .persistAssistantError(conv.id, e.message)
+                            _messages.value = _messages.value + errorMsg
+                        }
+                    } finally {
+                        sendGate.finish()
+                        _isGenerating.value = false
+                    }
+                }
+            } catch (e: CancellationException) {
+                finishGeneration()
+                throw e
+            } catch (e: Exception) {
+                AppLogger.e("ChatVM", "Send setup error: ${e.message}")
+                val errorMsg = ChatTurnErrorPersister(conversationMessageStore())
+                    .persistAssistantError(conv.id, e.message)
+                _messages.value = _messages.value + errorMsg
+                finishGeneration()
             }
         }
     }
 
+    private fun finishGeneration() {
+        sendGate.finish()
+        _streamingContent.value = ""
+        _isGenerating.value = false
+    }
+
     fun stopGeneration() {
         AppLogger.i("ChatVM", "Stop requested")
+        val content = _streamingContent.value
         streamJob?.cancel()
         viewModelScope.launch {
-            val content = _streamingContent.value
-            if (content.isNotBlank()) {
-                val conv = _conversation.value ?: return@launch
+            val conv = _conversation.value
+            if (content.isNotBlank() && conv != null) {
                 val msg = ChatMessage(conversationId = conv.id, role = "assistant", content = content)
                 app.conversationRepo.saveMessage(msg)
                 _messages.value = _messages.value + msg
             }
-            _streamingContent.value = ""
-            _isGenerating.value = false
+            finishGeneration()
         }
     }
 

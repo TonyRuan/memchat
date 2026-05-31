@@ -1,5 +1,25 @@
 # MemoryChat Development Log
 
+## v1.0.42 (2026-06-01)
+
+### Changes
+- Added a generation send gate so a chat turn cannot start a second LLM stream before the current generation finishes
+- Cleared the streaming bubble before appending the final assistant message, avoiding a duplicate-looking UI frame at stream completion
+- Made stream cancellation skip the generic error-save path so Stop does not race with the stream collector into duplicate partial replies
+- Updated the emulator smoke script default APK path to v1.0.42
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.ui.chat.GenerationSendGateTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat test`
+- `.\gradlew.bat connectedDebugAndroidTest`
+- `.\gradlew.bat assembleDebug`
+- Sub-agent emulator UI validation on `emulator-5554`: installed v1.0.42, sent `duplicate ui probe 1042`, final UI showed 1 assistant bubble, DB had 1 user + 1 assistant, and logcat counted `Sending`/`Starting stream`/`Stream done`/`Message saved`/`SSE [DONE]` once each
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.42-debug.apk`
+
+---
+
 ## v1.0.41 (2026-06-01)
 
 ### Changes
