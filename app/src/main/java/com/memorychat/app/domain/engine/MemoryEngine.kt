@@ -111,45 +111,88 @@ Output JSON format:
         }
     }
 
+    /**
+     * Try to extract a JSON object from raw LLM output.
+     * Handles: direct JSON, ```json code blocks, JSON buried in surrounding text.
+     */
+    private fun extractJsonObject(raw: String): com.google.gson.JsonObject {
+        val trimmed = raw.trim()
+
+        // 1. Try direct parse
+        try {
+            return JsonParser.parseString(trimmed).asJsonObject
+        } catch (_: Exception) { }
+
+        // 2. Try stripping ```json ... ``` blocks
+        val codeBlockPattern = Regex("```(?:json)?\\s*\n?(.*?)\n?```", RegexOption.DOT_MATCHES_ALL)
+        codeBlockPattern.find(trimmed)?.let { match ->
+            try {
+                return JsonParser.parseString(match.groupValues[1].trim()).asJsonObject
+            } catch (_: Exception) { }
+        }
+
+        // 3. Try finding first { ... } in surrounding text
+        val firstBrace = trimmed.indexOf('{')
+        if (firstBrace >= 0) {
+            var depth = 0
+            for (i in firstBrace until trimmed.length) {
+                when (trimmed[i]) { '{' -> depth++; '}' -> depth-- }
+                if (depth == 0) {
+                    try {
+                        return JsonParser.parseString(trimmed.substring(firstBrace, i + 1)).asJsonObject
+                    } catch (_: Exception) { }
+                    break
+                }
+            }
+        }
+
+        throw IllegalArgumentException("No valid JSON object found in input")
+    }
+
+    /** Helper: get string field with alias fallback (e.g. "type" / "category"). */
+    private fun com.google.gson.JsonObject.getString(vararg keys: String): String? {
+        for (key in keys) {
+            val el = get(key)
+            if (el != null && !el.isJsonNull) return el.asString
+        }
+        return null
+    }
+
     private fun parseExtractionResult(json: String): MemoryExtractionResult {
         return try {
-            val cleaned = json.trim().let {
-                if (it.startsWith("```")) it.lines().drop(1).dropLast(1).joinToString("\n")
-                else it
-            }
-            val obj = JsonParser.parseString(cleaned).asJsonObject
+            val obj = extractJsonObject(json)
             val newMemories = obj.getAsJsonArray("new_memories")?.map { item ->
                 val o = item.asJsonObject
                 MemoryCandidate(
-                    type = MemoryType.valueOf(o.get("type")?.asString?.uppercase() ?: "PROFILE"),
-                    content = o.get("content")?.asString ?: "",
+                    type = MemoryType.valueOf(o.getString("type", "category")?.uppercase() ?: "PROFILE"),
+                    content = o.getString("content", "text") ?: "",
                     importance = o.get("importance")?.asInt ?: 3,
                     confidence = o.get("confidence")?.asFloat ?: 0.8f,
-                    statusSuggestion = MemoryStatus.valueOf(o.get("status_suggestion")?.asString?.uppercase() ?: "ACTIVE"),
-                    reason = o.get("reason")?.asString ?: ""
+                    statusSuggestion = MemoryStatus.valueOf(o.getString("status_suggestion", "status")?.uppercase() ?: "ACTIVE"),
+                    reason = o.getString("reason") ?: ""
                 )
             } ?: emptyList()
 
             val updates = obj.getAsJsonArray("updates")?.map { item ->
                 val o = item.asJsonObject
                 MemoryUpdate(
-                    targetMemoryId = o.get("target_memory_id")?.asString ?: "",
-                    newContent = o.get("new_content")?.asString ?: "",
-                    reason = o.get("reason")?.asString ?: ""
+                    targetMemoryId = o.getString("target_memory_id", "id") ?: "",
+                    newContent = o.getString("new_content", "content") ?: "",
+                    reason = o.getString("reason") ?: ""
                 )
             } ?: emptyList()
 
             val discarded = obj.getAsJsonArray("discarded")?.map { item ->
                 val o = item.asJsonObject
                 DiscardedInfo(
-                    content = o.get("content")?.asString ?: "",
-                    reason = o.get("reason")?.asString ?: ""
+                    content = o.getString("content", "text") ?: "",
+                    reason = o.getString("reason") ?: ""
                 )
             } ?: emptyList()
 
             MemoryExtractionResult(newMemories, updates, discarded)
         } catch (e: Exception) {
-            AppLogger.e("MemoryEngine", "Extract failed: ${e.javaClass.simpleName}: ${e.message}")
+            AppLogger.e("MemoryEngine", "Parse failed: ${e.javaClass.simpleName}: ${e.message}")
             MemoryExtractionResult()
         }
     }

@@ -121,33 +121,38 @@ class OpenAICompatibleProvider(
     }.flowOn(Dispatchers.IO)
 
     override suspend fun complete(request: ChatRequest): ChatResponse {
-        val body = buildRequestBody(request, false)
-        val httpRequest = Request.Builder()
-            .url("$baseUrl/chat/completions")
-            .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("Content-Type", "application/json")
-            .post(body.toRequestBody("application/json".toMediaType()))
-            .build()
+        return try {
+            val body = buildRequestBody(request, false)
+            val httpRequest = Request.Builder()
+                .url("$baseUrl/chat/completions")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Content-Type", "application/json")
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build()
 
-        val response = client.newCall(httpRequest).execute()
-        val responseBody = response.body?.string() ?: "{}"
-        response.close()
+            val response = client.newCall(httpRequest).execute()
+            val responseBody = response.body?.string() ?: "{}"
+            response.close()
 
-        try {
-            val json = JsonParser.parseString(responseBody).asJsonObject
-            val choices = json.getAsJsonArray("choices")
-            if (choices != null && choices.size() > 0) {
-                val message = choices[0].asJsonObject?.getAsJsonObject("message")
-                if (message != null && message.has("content")) {
-                    val content = message.get("content")?.asString ?: ""
-                    return ChatResponse(content = content)
+            try {
+                val json = JsonParser.parseString(responseBody).asJsonObject
+                val choices = json.getAsJsonArray("choices")
+                if (choices != null && choices.size() > 0) {
+                    val message = choices[0].asJsonObject?.getAsJsonObject("message")
+                    if (message != null && message.has("content")) {
+                        val content = message.get("content")?.asString ?: ""
+                        return ChatResponse(content = content)
+                    }
                 }
+                AppLogger.w("LlmProvider", "Unexpected response format: ${responseBody.take(200)}")
+                ChatResponse(content = "")
+            } catch (e: Exception) {
+                AppLogger.e("LlmProvider", "Parse error: ${e.message}")
+                ChatResponse(content = "")
             }
-            AppLogger.w("LlmProvider", "Unexpected response format: ${responseBody.take(200)}")
-            return ChatResponse(content = "")
         } catch (e: Exception) {
-            AppLogger.e("LlmProvider", "Parse error: ${e.message}")
-            return ChatResponse(content = "")
+            AppLogger.e("LlmProvider", "complete() failed: ${e.javaClass.simpleName}: ${e.message}")
+            ChatResponse(content = "")
         }
     }
 }

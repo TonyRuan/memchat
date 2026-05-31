@@ -176,13 +176,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             AppLogger.i("ChatVM", "Extracted: new=${result.newMemories.size}, updates=${result.updates.size}")
 
             result.newMemories.forEach { candidate ->
-                if (!app.memoryRepo.isTombstoned(candidate.content, candidate.type)) {
-                    app.memoryRepo.insert(Memory(
-                        type = candidate.type, content = candidate.content,
-                        status = candidate.statusSuggestion, importance = candidate.importance,
-                        confidence = candidate.confidence, sourceConversationId = conv.id
-                    ))
+                if (candidate.content.isBlank()) return@forEach
+                if (app.memoryRepo.isTombstoned(candidate.content, candidate.type)) {
+                    AppLogger.d("ChatVM", "Skipping tombstoned: ${candidate.content.take(40)}")
+                    return@forEach
                 }
+                // Also skip if duplicate content already exists in active memories
+                if (existing.any { it.content.equals(candidate.content, ignoreCase = true) }) {
+                    AppLogger.d("ChatVM", "Skipping duplicate: ${candidate.content.take(40)}")
+                    return@forEach
+                }
+                app.memoryRepo.insert(Memory(
+                    type = candidate.type, content = candidate.content,
+                    status = candidate.statusSuggestion, importance = candidate.importance,
+                    confidence = candidate.confidence, sourceConversationId = conv.id
+                ))
             }
             result.updates.forEach { update ->
                 val existing = app.memoryRepo.getById(update.targetMemoryId)
