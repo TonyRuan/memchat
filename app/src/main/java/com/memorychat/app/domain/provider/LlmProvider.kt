@@ -94,10 +94,13 @@ class OpenAICompatibleProvider(
                             val choice = choices[0].asJsonObject
                             val delta = choice.getAsJsonObject("delta")
                             if (delta != null && delta.has("content")) {
-                                val content = delta.get("content")?.asString
-                                if (!content.isNullOrEmpty()) {
-                                    chunkCount++
-                                    emit(ChatChunk(content = content, done = false))
+                                val contentElement = delta.get("content")
+                                if (contentElement != null && !contentElement.isJsonNull) {
+                                    val content = contentElement.asString
+                                    if (!content.isNullOrEmpty()) {
+                                        chunkCount++
+                                        emit(ChatChunk(content = content, done = false))
+                                    }
                                 }
                             }
                         }
@@ -148,6 +151,7 @@ class OpenAICompatibleProvider(
         }
     }
 }
+
 
 
 
