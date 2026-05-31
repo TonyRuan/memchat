@@ -78,14 +78,14 @@ fun LogScreen(onBack: () -> Unit) {
             }
 
             val timeFmt = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+            val reversedLogs = remember(filteredLogs) { filteredLogs.reversed() }
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                items(filteredLogs.size) { index ->
-                    val entry = filteredLogs[filteredLogs.size - 1 - index]
+                items(reversedLogs, key = { it.hashCode() }) { entry ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -117,4 +117,5 @@ fun LogScreen(onBack: () -> Unit) {
         }
     }
 }
+
 
