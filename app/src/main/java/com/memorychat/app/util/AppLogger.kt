@@ -28,8 +28,19 @@ object AppLogger {
     fun w(tag: String, message: String, detail: String? = null) = log(Level.WARN, tag, message, detail)
     fun e(tag: String, message: String, detail: String? = null) = log(Level.ERROR, tag, message, detail)
 
+    private fun sanitize(text: String): String {
+        // Mask API keys (sk-... or any bearer token pattern)
+        return text.replace(Regex("sk-[A-Za-z0-9_-]{8,}")) { match ->
+            match.value.take(3) + "****"
+        }.replace(Regex("(Bearer\\s+)[A-Za-z0-9._-]{8,}")) { match ->
+            match.groupValues[1] + "****"
+        }
+    }
+
     private fun log(level: Level, tag: String, message: String, detail: String?) {
-        val entry = LogEntry(level = level, tag = tag, message = message, detail = detail)
+        val safeMessage = sanitize(message)
+        val safeDetail = detail?.let { sanitize(it) }
+        val entry = LogEntry(level = level, tag = tag, message = safeMessage, detail = safeDetail)
         synchronized(this) {
             _logs.value = (_logs.value + entry).takeLast(500)
         }
@@ -41,7 +52,7 @@ object AppLogger {
                 Level.ERROR -> android.util.Log.ERROR
             },
             tag,
-            message + if (detail != null) "\n$detail" else ""
+            safeMessage + if (safeDetail != null) "\n$safeDetail" else ""
         )
     }
 
@@ -80,4 +91,5 @@ object AppLogger {
         _logs.value = emptyList()
     }
 }
+
 

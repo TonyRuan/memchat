@@ -18,7 +18,7 @@
         </activity>
         <receiver
             android:name=".AdbInputReceiver"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="com.memorychat.app.SEND_MESSAGE" />
             </intent-filter>
