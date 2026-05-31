@@ -1,5 +1,21 @@
 # MemoryChat Development Log
 
+## v1.0.33 (2026-06-01)
+
+### Changes
+- Added a PRD-aligned gap and bug audit report under `docs/audits/`
+- Consolidated subagent findings across data/storage, chat/memory/context, UI, and test/build coverage
+- Identified current P0 blockers around context compression, automatic memory extraction, Debug recall visibility, persona editing, conversation creation, ADB memory switches, and memory overwrite protections
+
+### Verification
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.33-debug.apk`
+
+---
+
 ## v1.0.32 (2026-06-01)
 
 ### Changes
