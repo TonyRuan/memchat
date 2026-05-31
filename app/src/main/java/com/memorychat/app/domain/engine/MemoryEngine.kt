@@ -170,7 +170,7 @@ Output JSON format:
                 allActiveMemories.filter { it.type == MemoryType.PREFERENCE }.take(3)
             }
             else -> {
-                allActiveMemories.filter { it.type == MemoryType.PROFILE }.take(1) +
+                allActiveMemories.filter { it.type == MemoryType.PROFILE }.take(3) +
                 allActiveMemories.filter { it.type == MemoryType.PREFERENCE }.take(2) +
                 allActiveMemories.filter { it.type == MemoryType.SUMMARY }.take(2)
             }
@@ -194,6 +194,7 @@ Output JSON format:
         }
     }
 }
+
 
 
 

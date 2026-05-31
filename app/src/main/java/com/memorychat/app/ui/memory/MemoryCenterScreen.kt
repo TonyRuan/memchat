@@ -20,15 +20,29 @@ import kotlinx.coroutines.launch
 @Composable
 fun MemoryCenterScreen(onBack: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     val app = context.applicationContext as MemoryChatApp
     val scope = rememberCoroutineScope()
 
     var memories by remember { mutableStateOf<List<Memory>>(emptyList()) }
+    var refreshTrigger by remember { mutableIntStateOf(0) }
     var selectedTab by remember { mutableIntStateOf(0) }
     var editingMemory by remember { mutableStateOf<Memory?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                refreshTrigger++
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+    
+    LaunchedEffect(refreshTrigger) {
         memories = app.memoryRepo.getAllMemories()
     }
 
@@ -239,3 +253,4 @@ fun AddMemoryDialog(onDismiss: () -> Unit, onSave: (MemoryType, String) -> Unit)
         }
     )
 }
+
