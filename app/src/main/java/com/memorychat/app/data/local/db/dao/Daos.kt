@@ -44,16 +44,16 @@ interface MemoryDao {
     @Query("SELECT * FROM memories WHERE status = 'ACTIVE' ORDER BY importance DESC, updatedAt DESC")
     suspend fun getActiveMemories(): List<MemoryEntity>
 
-    @Query("SELECT * FROM memories WHERE status = 'pending' ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM memories WHERE status = 'PENDING' ORDER BY updatedAt DESC")
     suspend fun getPendingMemories(): List<MemoryEntity>
 
-    @Query("SELECT * FROM memories WHERE status != 'deleted' ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM memories WHERE status != 'DELETED' ORDER BY updatedAt DESC")
     suspend fun getAllMemories(): List<MemoryEntity>
 
     @Query("SELECT * FROM memories WHERE id = :id")
     suspend fun getById(id: String): MemoryEntity?
 
-    @Query("SELECT * FROM memories WHERE type = :type AND status = 'active' ORDER BY importance DESC")
+    @Query("SELECT * FROM memories WHERE type = :type AND status = 'ACTIVE' ORDER BY importance DESC")
     suspend fun getByType(type: String): List<MemoryEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

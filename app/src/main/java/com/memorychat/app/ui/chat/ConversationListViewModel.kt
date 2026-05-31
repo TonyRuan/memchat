@@ -7,6 +7,7 @@ import com.memorychat.app.MemoryChatApp
 import com.memorychat.app.domain.model.Conversation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class ConversationListViewModel(application: Application) : AndroidViewModel(application) {
@@ -28,14 +29,15 @@ class ConversationListViewModel(application: Application) : AndroidViewModel(app
     fun createConversation(title: String = "新会话"): String {
         val conv = Conversation(title = title)
         viewModelScope.launch {
-            // 绑定默认 persona
             val defaultPersona = app.personaRepo.getDefaultPersona()
-            val convWithPersona = if (defaultPersona != null) {
-                conv.copy(personaId = defaultPersona.id)
-            } else {
-                conv
-            }
-            app.conversationRepo.saveConversation(convWithPersona)
+            val useMemory = app.settingsDataStore.defaultUseMemory.first()
+            val generateMemory = app.settingsDataStore.defaultGenerateMemory.first()
+            val convWithDefaults = conv.copy(
+                personaId = defaultPersona?.id,
+                useMemory = useMemory,
+                generateMemory = generateMemory
+            )
+            app.conversationRepo.saveConversation(convWithDefaults)
             _conversations.value = app.conversationRepo.getAllConversations()
         }
         return conv.id
