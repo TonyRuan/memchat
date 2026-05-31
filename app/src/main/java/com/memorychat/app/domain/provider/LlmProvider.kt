@@ -87,15 +87,22 @@ class OpenAICompatibleProvider(
                 }
 
                 try {
-                    val json = JsonParser.parseString(data).asJsonObject
-                    val choices = json.getAsJsonArray("choices")
-                    if (choices != null && choices.size() > 0) {
-                        val delta = choices[0].asJsonObject.getAsJsonObject("delta")
-                        val content = delta?.get("content")?.asString
-                        if (!content.isNullOrEmpty()) {
-                            chunkCount++
-                            emit(ChatChunk(content = content, done = false))
+                    try {
+                        val json = JsonParser.parseString(data).asJsonObject
+                        val choices = json.getAsJsonArray("choices")
+                        if (choices != null && choices.size() > 0) {
+                            val choice = choices[0].asJsonObject
+                            val delta = choice.getAsJsonObject("delta")
+                            if (delta != null && delta.has("content")) {
+                                val content = delta.get("content")?.asString
+                                if (!content.isNullOrEmpty()) {
+                                    chunkCount++
+                                    emit(ChatChunk(content = content, done = false))
+                                }
+                            }
                         }
+                    } catch (e: Exception) {
+                        AppLogger.w("LlmProvider", "Parse error: ${e.message}")
                     }
                 } catch (e: Exception) {
                     AppLogger.w("LlmProvider", "Parse error: ${e.message}")
@@ -123,15 +130,26 @@ class OpenAICompatibleProvider(
         val responseBody = response.body?.string() ?: "{}"
         response.close()
 
-        val json = JsonParser.parseString(responseBody).asJsonObject
-        val content = json.getAsJsonArray("choices")
-            ?.get(0)?.asJsonObject
-            ?.getAsJsonObject("message")
-            ?.get("content")?.asString ?: ""
-
-        return ChatResponse(content = content)
+        try {
+            val json = JsonParser.parseString(responseBody).asJsonObject
+            val choices = json.getAsJsonArray("choices")
+            if (choices != null && choices.size() > 0) {
+                val message = choices[0].asJsonObject?.getAsJsonObject("message")
+                if (message != null && message.has("content")) {
+                    val content = message.get("content")?.asString ?: ""
+                    return ChatResponse(content = content)
+                }
+            }
+            AppLogger.w("LlmProvider", "Unexpected response format: ${responseBody.take(200)}")
+            return ChatResponse(content = "")
+        } catch (e: Exception) {
+            AppLogger.e("LlmProvider", "Parse error: ${e.message}")
+            return ChatResponse(content = "")
+        }
     }
 }
+
+
 
 
 
