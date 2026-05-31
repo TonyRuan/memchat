@@ -105,7 +105,7 @@ class OpenAICompatibleProvider(
                             }
                         }
                     } catch (e: Exception) {
-                        AppLogger.w("LlmProvider", "Parse error: ${e.message}")
+                        // Silently skip - JsonNull is normal in streaming
                     }
                 } catch (e: Exception) {
                     AppLogger.w("LlmProvider", "Parse error: ${e.message}")
@@ -151,6 +151,7 @@ class OpenAICompatibleProvider(
         }
     }
 }
+
 
 
 
