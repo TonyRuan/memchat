@@ -78,6 +78,7 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
                 3 -> memories.filter { it.type == MemoryType.PROJECT && it.status != MemoryStatus.DELETED }
                 4 -> memories.filter { it.type == MemoryType.SUMMARY && it.status != MemoryStatus.DELETED }
                 5 -> memories.filter { it.status == MemoryStatus.PENDING }
+                6 -> memories.filter { it.status == MemoryStatus.DISABLED }
                 else -> memories.filter { it.status != MemoryStatus.DELETED }
             }
 
@@ -253,4 +254,5 @@ fun AddMemoryDialog(onDismiss: () -> Unit, onSave: (MemoryType, String) -> Unit)
         }
     )
 }
+
 

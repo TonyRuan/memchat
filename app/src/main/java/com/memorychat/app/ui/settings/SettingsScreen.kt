@@ -2,6 +2,8 @@ package com.memorychat.app.ui.settings
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -88,6 +90,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 value = apiKey,
                 onValueChange = { apiKey = it },
                 label = { Text("API Key") },
+                visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -164,4 +167,5 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
     }
 }
+
 
