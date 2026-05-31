@@ -159,3 +159,12 @@ MiMo model uses separate reasoning_content field that consumes max_tokens. Must 
 
 ### Verified
 - Memory extraction now works: "用户是一名Android开发者，在北京工作" extracted as PROFILE
+
+---
+
+## v1.0.8 (2026-05-31 18:20)
+
+### Bug Fixes
+- **LogScreen**: Fixed key collision crash — switched to index-based keys
+- **AppLogger**: Added synchronized blocks for thread-safe log operations
+- **AppLogger**: Made export function thread-safe with snapshot
