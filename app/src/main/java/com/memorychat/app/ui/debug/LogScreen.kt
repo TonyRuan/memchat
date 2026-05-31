@@ -1,6 +1,9 @@
 package com.memorychat.app.ui.debug
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -117,5 +120,6 @@ fun LogScreen(onBack: () -> Unit) {
         }
     }
 }
+
 
 
