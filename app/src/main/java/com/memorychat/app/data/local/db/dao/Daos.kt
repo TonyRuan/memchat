@@ -38,7 +38,7 @@ interface MessageDao {
 
 @Dao
 interface MemoryDao {
-    @Query("SELECT * FROM memories WHERE status = 'active' ORDER BY importance DESC, updatedAt DESC")
+    @Query("SELECT * FROM memories WHERE status = 'ACTIVE' ORDER BY importance DESC, updatedAt DESC")
     suspend fun getActiveMemories(): List<MemoryEntity>
 
     @Query("SELECT * FROM memories WHERE status = 'pending' ORDER BY updatedAt DESC")
@@ -92,3 +92,4 @@ interface PersonaDao {
     @Query("DELETE FROM personas WHERE id = :id")
     suspend fun delete(id: String)
 }
+

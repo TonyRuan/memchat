@@ -158,8 +158,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         AppLogger.i("ChatVM", "Extracting memories...")
         viewModelScope.launch {
+            // Reload messages from DB to ensure we have the latest
+            val freshMessages = app.conversationRepo.getMessages(conv.id)
+            _messages.value = freshMessages
+            AppLogger.i("ChatVM", "Reloaded ${freshMessages.size} messages for extraction")
+            
             val existing = app.memoryRepo.getActiveMemories()
-            val result = engine.extractMemories(_messages.value, existing)
+            val result = engine.extractMemories(freshMessages, existing)
             AppLogger.i("ChatVM", "Extracted: new=${result.newMemories.size}, updates=${result.updates.size}")
 
             result.newMemories.forEach { candidate ->
@@ -187,5 +192,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
+
 
 
