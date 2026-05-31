@@ -1,9 +1,23 @@
+import java.util.Properties
+
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
     id 'org.jetbrains.kotlin.plugin.compose'
     id 'com.google.devtools.ksp'
 }
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { stream ->
+        localProperties.load(stream)
+    }
+}
+def escapeBuildConfigString = { value ->
+    value.toString().replace("\\", "\\\\").replace("\"", "\\\"")
+}
+def defaultApiKey = escapeBuildConfigString(localProperties.getProperty("memorychat.defaultApiKey", ""))
 
 android {
     namespace 'com.memorychat.app'
@@ -13,8 +27,9 @@ android {
         applicationId "com.memorychat.app"
         minSdk 26
         targetSdk 35
-        versionCode 31
-        versionName "1.0.30"
+        versionCode 32
+        versionName "1.0.31"
+        buildConfigField "String", "DEFAULT_API_KEY", "\"\""
     }
 
     applicationVariants.configureEach { variant ->
@@ -24,6 +39,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField "String", "DEFAULT_API_KEY", "\"${defaultApiKey}\""
+        }
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -41,6 +59,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -81,6 +100,8 @@ dependencies {
 
     // Security (EncryptedSharedPreferences)
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
+    testImplementation 'junit:junit:4.13.2'
 }
 
 

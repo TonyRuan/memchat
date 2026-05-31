@@ -7,12 +7,20 @@ import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.memorychat.app.BuildConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+
+object ApiKeyDefaults {
+    fun resolve(storedApiKey: String?, defaultApiKey: String): String {
+        val stored = storedApiKey?.trim().orEmpty()
+        return stored.ifEmpty { defaultApiKey.trim() }
+    }
+}
 
 class SettingsDataStore(private val context: Context) {
     companion object {
@@ -48,12 +56,19 @@ class SettingsDataStore(private val context: Context) {
     val defaultPersonaId: Flow<String> = context.dataStore.data.map { it[DEFAULT_PERSONA_ID] ?: "" }
     val maxTokens: Flow<Int> = context.dataStore.data.map { it[MAX_TOKENS] ?: 8192 }
 
+    private fun resolvedApiKey(): String {
+        return ApiKeyDefaults.resolve(
+            storedApiKey = encryptedPrefs.getString(KEY_API_KEY, ""),
+            defaultApiKey = BuildConfig.DEFAULT_API_KEY
+        )
+    }
+
     // API Key uses EncryptedSharedPreferences with callbackFlow to emit current value
     val apiKey: Flow<String> = callbackFlow {
-        trySend(encryptedPrefs.getString(KEY_API_KEY, "") ?: "")
+        trySend(resolvedApiKey())
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
             if (key == KEY_API_KEY) {
-                trySend(prefs.getString(KEY_API_KEY, "") ?: "")
+                trySend(ApiKeyDefaults.resolve(prefs.getString(KEY_API_KEY, ""), BuildConfig.DEFAULT_API_KEY))
             }
         }
         encryptedPrefs.registerOnSharedPreferenceChangeListener(listener)

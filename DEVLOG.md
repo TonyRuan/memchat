@@ -1,5 +1,22 @@
 # MemoryChat Development Log
 
+## v1.0.31 (2026-06-01)
+
+### Changes
+- Added project-level agent/development conventions in `AGENTS.md`
+- Registered the v1.1 PRD as the authoritative product and acceptance reference
+- Added debug-only default API key injection from ignored `local.properties`
+- Added fallback logic so encrypted saved API key takes priority over the debug default
+
+### Verification
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+
+### APK
+- Debug APK should be produced as `app/build/outputs/apk/debug/MemoryChat-v1.0.31-debug.apk`
+
+---
+
 ## v1.0.3 (2026-05-30 22:25)
 
 ### Changes
