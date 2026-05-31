@@ -1,4 +1,4 @@
-package com.memorychat.app.ui.memory
+﻿package com.memorychat.app.ui.memory
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -46,20 +46,20 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
         memories = app.memoryRepo.getAllMemories()
     }
 
-    val tabs = listOf("ȫ��", "����", "ƫ��", "��Ŀ", "ժҪ", "��ȷ��")
+    val tabs = listOf("全部", "画像", "偏好", "项目", "摘要", "待确认", "禁用")
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("��������") },
+                title = { Text("记忆中心") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "����")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                     }
                 },
                 actions = {
                     IconButton(onClick = { showAddDialog = true }) {
-                        Icon(Icons.Default.Add, "���Ӽ���")
+                        Icon(Icons.Default.Add, "添加记忆")
                     }
                 }
             )
@@ -158,7 +158,7 @@ fun MemoryCard(
     if (showSourceDialog) {
         AlertDialog(
             onDismissRequest = { showSourceDialog = false },
-            title = { Text("查看来源") },
+            title = { Text("记忆中心") },
             text = {
                 Column {
                     Text("来源会话 ID:")
@@ -230,7 +230,7 @@ fun EditMemoryDialog(memory: Memory, onDismiss: () -> Unit, onSave: (Memory) -> 
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("编辑记忆") },
+        title = { Text("记忆中心") },
         text = {
             OutlinedTextField(value = content, onValueChange = { content = it }, modifier = Modifier.fillMaxWidth())
         },
@@ -253,7 +253,7 @@ fun AddMemoryDialog(onDismiss: () -> Unit, onSave: (MemoryType, String) -> Unit)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("添加记忆") },
+        title = { Text("记忆中心") },
         text = {
             Column {
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {

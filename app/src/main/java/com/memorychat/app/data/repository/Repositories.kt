@@ -20,6 +20,7 @@ class ConversationRepository(
     suspend fun getConversation(id: String) = conversationDao.getById(id)?.toDomain()
     suspend fun saveConversation(conv: Conversation) = conversationDao.insert(conv.toEntity())
     suspend fun deleteConversation(id: String) {
+        messageDao.deleteByConversationId(id)
         conversationDao.delete(id)
     }
 
@@ -108,7 +109,7 @@ class ExportImportService(
     private val gson = Gson()
 
     suspend fun exportMemoriesJson(): String {
-        val memories = memoryRepository.getAllMemories()
+        val memories = memoryRepository.getAllMemories().filter { it.status != MemoryStatus.DELETED }
         return gson.toJson(mapOf(
             "version" to "1.0",
             "exported_at" to java.time.Instant.now().toString(),
@@ -118,7 +119,7 @@ class ExportImportService(
     }
 
     suspend fun exportMemoriesMarkdown(): String {
-        val memories = memoryRepository.getAllMemories()
+        val memories = memoryRepository.getAllMemories().filter { it.status != MemoryStatus.DELETED }
         val sb = StringBuilder("# Long-term Memories\n\nExported at: ${java.time.Instant.now()}\n\n")
 
         memories.groupBy { it.type }.forEach { (type, list) ->

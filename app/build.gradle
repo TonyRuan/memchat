@@ -13,8 +13,8 @@ android {
         applicationId "com.memorychat.app"
         minSdk 26
         targetSdk 35
-        versionCode 24
-        versionName "1.0.23"
+        versionCode 25
+        versionName "1.0.24"
     }
 
     applicationVariants.configureEach { variant ->
@@ -82,6 +82,7 @@ dependencies {
     // Security (EncryptedSharedPreferences)
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
 }
+
 
 
 
