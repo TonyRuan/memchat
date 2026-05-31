@@ -84,7 +84,8 @@ fun LogScreen(onBack: () -> Unit) {
                 contentPadding = PaddingValues(8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                items(filteredLogs.reversed(), key = { "${it.timestamp}_${it.tag}" }) { entry ->
+                items(filteredLogs.size) { index ->
+                    val entry = filteredLogs[filteredLogs.size - 1 - index]
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -116,3 +117,4 @@ fun LogScreen(onBack: () -> Unit) {
         }
     }
 }
+

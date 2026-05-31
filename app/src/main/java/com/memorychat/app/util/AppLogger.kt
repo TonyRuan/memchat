@@ -30,7 +30,9 @@ object AppLogger {
 
     private fun log(level: Level, tag: String, message: String, detail: String?) {
         val entry = LogEntry(level = level, tag = tag, message = message, detail = detail)
-        _logs.value = (_logs.value + entry).takeLast(500)
+        synchronized(this) {
+            _logs.value = (_logs.value + entry).takeLast(500)
+        }
         android.util.Log.println(
             when (level) {
                 Level.DEBUG -> android.util.Log.DEBUG
@@ -44,6 +46,7 @@ object AppLogger {
     }
 
     fun exportLogs(context: Context): String {
+        val snapshot = synchronized(this) { _logs.value.toList() }
         val sb = StringBuilder()
         sb.appendLine("=== MemoryChat Logs ===")
         sb.appendLine("Exported: ${dateFormat.format(Date())}")
@@ -51,7 +54,7 @@ object AppLogger {
         sb.appendLine("========================")
         sb.appendLine()
 
-        _logs.value.forEach { entry ->
+        snapshot.forEach { entry ->
             val time = dateFormat.format(Date(entry.timestamp))
             sb.appendLine("[$time] [${entry.level}] [${entry.tag}] ${entry.message}")
             if (entry.detail != null) {
@@ -77,3 +80,4 @@ object AppLogger {
         _logs.value = emptyList()
     }
 }
+
