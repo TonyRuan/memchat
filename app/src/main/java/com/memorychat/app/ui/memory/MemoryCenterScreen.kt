@@ -14,6 +14,7 @@ import com.memorychat.app.MemoryChatApp
 import com.memorychat.app.domain.model.Memory
 import com.memorychat.app.domain.model.MemoryStatus
 import com.memorychat.app.domain.model.MemoryType
+import com.memorychat.app.domain.model.Persona
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -25,6 +26,7 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
 
     var memories by remember { mutableStateOf<List<Memory>>(emptyList()) }
+    var personas by remember { mutableStateOf<List<Persona>>(emptyList()) }
     var refreshTrigger by remember { mutableIntStateOf(0) }
     var selectedTab by remember { mutableIntStateOf(0) }
     var editingMemory by remember { mutableStateOf<Memory?>(null) }
@@ -44,9 +46,11 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
     
     LaunchedEffect(refreshTrigger) {
         memories = app.memoryRepo.getAllMemories()
+        app.getOrCreateDefaultPersona()
+        personas = app.personaRepo.listPersonas()
     }
 
-    val tabs = listOf("全部", "画像", "偏好", "项目", "摘要", "待确认", "禁用")
+    val tabs = listOf("全部", "人格", "画像", "偏好", "项目", "摘要", "待确认", "禁用")
 
     Scaffold(
         topBar = {
@@ -66,19 +70,19 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            TabRow(selectedTabIndex = selectedTab) {
+            ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 0.dp) {
                 tabs.forEachIndexed { index, title ->
                     Tab(selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text(title) })
                 }
             }
 
             val filteredMemories = when (selectedTab) {
-                1 -> memories.filter { it.type == MemoryType.PROFILE && it.status != MemoryStatus.DELETED }
-                2 -> memories.filter { it.type == MemoryType.PREFERENCE && it.status != MemoryStatus.DELETED }
-                3 -> memories.filter { it.type == MemoryType.PROJECT && it.status != MemoryStatus.DELETED }
-                4 -> memories.filter { it.type == MemoryType.SUMMARY && it.status != MemoryStatus.DELETED }
-                5 -> memories.filter { it.status == MemoryStatus.PENDING }
-                6 -> memories.filter { it.status == MemoryStatus.DISABLED }
+                2 -> memories.filter { it.type == MemoryType.PROFILE && it.status != MemoryStatus.DELETED }
+                3 -> memories.filter { it.type == MemoryType.PREFERENCE && it.status != MemoryStatus.DELETED }
+                4 -> memories.filter { it.type == MemoryType.PROJECT && it.status != MemoryStatus.DELETED }
+                5 -> memories.filter { it.type == MemoryType.SUMMARY && it.status != MemoryStatus.DELETED }
+                6 -> memories.filter { it.status == MemoryStatus.PENDING }
+                7 -> memories.filter { it.status == MemoryStatus.DISABLED }
                 else -> memories.filter { it.status != MemoryStatus.DELETED }
             }
 
@@ -86,29 +90,44 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(filteredMemories, key = { it.id }) { memory ->
-                    MemoryCard(
-                        memory = memory,
-                        onEdit = { editingMemory = memory },
-                        onDelete = {
-                            scope.launch {
-                                app.memoryRepo.delete(memory.id)
-                                memories = app.memoryRepo.getAllMemories()
-                            }
-                        },
-                        onToggleStatus = {
-                            scope.launch {
-                                if (memory.status == MemoryStatus.ACTIVE) {
-                                    app.memoryRepo.disable(memory.id)
-                                } else if (memory.status == MemoryStatus.DISABLED) {
-                                    app.memoryRepo.update(memory.copy(status = MemoryStatus.ACTIVE))
-                                } else if (memory.status == MemoryStatus.PENDING) {
-                                    app.memoryRepo.update(memory.copy(status = MemoryStatus.ACTIVE))
-                                }
-                                memories = app.memoryRepo.getAllMemories()
-                            }
+                if (selectedTab == 1) {
+                    if (personas.isEmpty()) {
+                        item {
+                            Text(
+                                text = "暂无人格",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                    )
+                    }
+                    items(personas, key = { it.id }) { persona ->
+                        PersonaCard(persona = persona)
+                    }
+                } else {
+                    items(filteredMemories, key = { it.id }) { memory ->
+                        MemoryCard(
+                            memory = memory,
+                            onEdit = { editingMemory = memory },
+                            onDelete = {
+                                scope.launch {
+                                    app.memoryRepo.delete(memory.id)
+                                    memories = app.memoryRepo.getAllMemories()
+                                }
+                            },
+                            onToggleStatus = {
+                                scope.launch {
+                                    if (memory.status == MemoryStatus.ACTIVE) {
+                                        app.memoryRepo.disable(memory.id)
+                                    } else if (memory.status == MemoryStatus.DISABLED) {
+                                        app.memoryRepo.update(memory.copy(status = MemoryStatus.ACTIVE))
+                                    } else if (memory.status == MemoryStatus.PENDING) {
+                                        app.memoryRepo.update(memory.copy(status = MemoryStatus.ACTIVE))
+                                    }
+                                    memories = app.memoryRepo.getAllMemories()
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -141,6 +160,45 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
                 }
             }
         )
+    }
+}
+
+@Composable
+fun PersonaCard(persona: Persona) {
+    val fields = PersonaDisplayFormatter.fields(persona)
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(persona.name, style = MaterialTheme.typography.titleMedium)
+                AssistChip(
+                    onClick = {},
+                    label = { Text(if (persona.isDefault) "默认人格" else "人格") }
+                )
+            }
+            if (fields.isEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "暂无更多人格设置",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    fields.forEach { (label, value) ->
+                        Column {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(value, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -1,5 +1,23 @@
 # MemoryChat Development Log
 
+## v1.0.47 (2026-06-01)
+
+### Changes
+- Added a dedicated Persona tab to Memory Center so users can inspect assistant persona state separately from long-term memories
+- Displayed persona name, default status, description, role, tone, behavior rules, and boundaries in the Persona card
+- Switched Memory Center tabs to a scrollable row so the added Persona tab does not squeeze labels on small screens
+- Updated the emulator smoke script default APK path to v1.0.47
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.ui.memory.PersonaDisplayFormatterTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.47-debug.apk`
+
+---
+
 ## v1.0.46 (2026-06-01)
 
 ### Changes
