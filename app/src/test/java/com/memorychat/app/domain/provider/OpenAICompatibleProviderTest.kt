@@ -65,12 +65,15 @@ class OpenAICompatibleProviderTest {
             val body = server.takeRequest().body.readUtf8()
             assertTrue(body.contains(""""tools""""))
             assertTrue(body.contains(""""web_search""""))
+            assertTrue(body.contains(""""type":"web_search""""))
+            assertTrue(body.contains(""""force_search":true"""))
+            assertTrue(body.contains(""""max_keyword":3"""))
             assertTrue(body.contains(""""tool_choice":"auto""""))
         }
     }
 
     @Test
-    fun completeRunsFallbackSearchWhenMimoReturnsWebSearchToolCall() = runTest {
+    fun completeDoesNotRunFallbackSearchWhenMimoReturnsWebSearchToolCall() = runTest {
         MockWebServer().use { server ->
             server.enqueue(
                 MockResponse().setBody(
@@ -96,18 +99,11 @@ class OpenAICompatibleProviderTest {
                     """.trimIndent()
                 )
             )
-            server.enqueue(MockResponse().setBody("""{"choices":[{"message":{"content":"final answer"}}]}"""))
             server.start()
             val provider = OpenAICompatibleProvider(
                 apiKey = "key",
                 baseUrl = server.url("/v1").toString().trimEnd('/'),
-                modelName = "model",
-                webSearchClient = object : WebSearchClient {
-                    override fun search(query: String): String {
-                        assertEquals("MiMo V2.5 latest", query)
-                        return "Result: MiMo V2.5 was updated today."
-                    }
-                }
+                modelName = "model"
             )
 
             val response = provider.complete(
@@ -119,13 +115,8 @@ class OpenAICompatibleProviderTest {
                 )
             )
 
-            assertEquals("final answer", response.content)
-            assertEquals(2, server.requestCount)
-            val secondBody = server.takeRequest().body.readUtf8().let {
-                server.takeRequest().body.readUtf8()
-            }
-            assertTrue(secondBody.contains("Web Search Results"))
-            assertTrue(secondBody.contains("MiMo V2.5 was updated today"))
+            assertEquals("", response.content)
+            assertEquals(1, server.requestCount)
         }
     }
 
@@ -160,6 +151,9 @@ class OpenAICompatibleProviderTest {
             val body = server.takeRequest().body.readUtf8()
             assertTrue(body.contains(""""tools""""))
             assertTrue(body.contains(""""web_search""""))
+            assertTrue(body.contains(""""type":"web_search""""))
+            assertTrue(body.contains(""""force_search":true"""))
+            assertTrue(body.contains(""""max_keyword":3"""))
             assertTrue(body.contains(""""tool_choice":"auto""""))
         }
     }

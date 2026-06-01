@@ -1,5 +1,26 @@
 # MemoryChat Development Log
 
+## v1.0.59 (2026-06-01)
+
+### Changes
+- Aligned MiMo web search requests with the official Xiaomi MiMo web search schema: `{"type":"web_search","max_keyword":3,"force_search":true,"limit":3}`
+- Removed the local DuckDuckGo/Baidu fallback search path; search now relies on the official MiMo web search plugin only
+- Sent both `Authorization: Bearer` and `api-key` headers to match OpenAI-compatible behavior and Xiaomi MiMo documentation
+- Kept streaming search as the primary Chat UI path; non-streaming ADB remains useful for diagnostics but no longer pretends to search locally
+- Updated the emulator smoke script default APK path to v1.0.59
+
+### Verification
+- Direct official-schema MiMo API check: non-streaming `web_search` returned synthesized content and URL annotations after plugin activation
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.provider.OpenAICompatibleProviderTest"`
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+- Physical-device ADB smoke on `10AE2P094M002SL`: installed v1.0.59 and sent `强制联网搜索武汉明天天气怎么样，用一句话回答`; MiMo official web search returned non-empty synthesized weather content without local fallback
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.59-debug.apk`
+
+---
+
 ## v1.0.58 (2026-06-01)
 
 ### Changes
