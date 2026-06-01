@@ -10,16 +10,53 @@ import org.junit.Test
 
 class PersonaInstructionExtractorTest {
     @Test
-    fun usesDeterministicDetectorBeforeModelFallback() = runTest {
+    fun usesModelClassificationForExplicitAssistantRename() = runTest {
         val provider = FakeLlmProvider(
-            completeResponses = listOf("""{"is_persona_instruction":false}""")
+            completeResponses = listOf(
+                """
+                {
+                  "category": "assistant_persona_update",
+                  "is_persona_instruction": true,
+                  "name": "小墨",
+                  "role": null,
+                  "tone": null,
+                  "behavior_rules": [],
+                  "boundaries": []
+                }
+                """.trimIndent()
+            )
         )
         val extractor = PersonaInstructionExtractor(provider, "fake-model")
 
         val instruction = extractor.detect("以后你叫小墨")
 
         assertEquals("小墨", instruction?.name)
-        assertTrue(provider.completeRequests.isEmpty())
+        assertTrue(provider.completeRequests.single().messages.single().content.contains("以后你叫小墨"))
+    }
+
+    @Test
+    fun modelClassificationCanRejectExplicitAssistantRenameText() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "category": "other",
+                  "is_persona_instruction": false,
+                  "name": null,
+                  "role": null,
+                  "tone": null,
+                  "behavior_rules": [],
+                  "boundaries": []
+                }
+                """.trimIndent()
+            )
+        )
+        val extractor = PersonaInstructionExtractor(provider, "fake-model")
+
+        val instruction = extractor.detect("以后你叫小墨")
+
+        assertNull(instruction)
+        assertEquals(1, provider.completeRequests.size)
     }
 
     @Test
@@ -78,14 +115,56 @@ class PersonaInstructionExtractorTest {
     }
 
     @Test
-    fun doesNotCallModelForUserProfileName() = runTest {
-        val provider = FakeLlmProvider()
+    fun usesModelClassificationForNaturalAssistantRenameWording() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "category": "assistant_persona_update",
+                  "is_persona_instruction": true,
+                  "name": "比比拉布",
+                  "role": null,
+                  "tone": null,
+                  "behavior_rules": [],
+                  "boundaries": []
+                }
+                """.trimIndent()
+            )
+        )
+        val extractor = PersonaInstructionExtractor(provider, "fake-model")
+
+        val instruction = extractor.detect(
+            content = "给你改名字为比比拉布",
+            currentPersona = Persona(name = "牛牛")
+        )
+
+        assertEquals("比比拉布", instruction?.name)
+        assertTrue(provider.completeRequests.single().messages.single().content.contains("给你改名字为比比拉布"))
+    }
+
+    @Test
+    fun usesModelClassificationForUserProfileName() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "category": "user_profile",
+                  "is_persona_instruction": false,
+                  "name": "张三",
+                  "role": null,
+                  "tone": null,
+                  "behavior_rules": [],
+                  "boundaries": []
+                }
+                """.trimIndent()
+            )
+        )
         val extractor = PersonaInstructionExtractor(provider, "fake-model")
 
         val instruction = extractor.detect("我叫张三")
 
-        assertEquals(null, instruction)
-        assertTrue(provider.completeRequests.isEmpty())
+        assertNull(instruction)
+        assertTrue(provider.completeRequests.single().messages.single().content.contains("我叫张三"))
     }
 
     @Test

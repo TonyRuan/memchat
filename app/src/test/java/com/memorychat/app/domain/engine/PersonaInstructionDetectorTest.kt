@@ -2,56 +2,12 @@ package com.memorychat.app.domain.engine
 
 import com.memorychat.app.domain.model.Persona
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PersonaInstructionDetectorTest {
     @Test
-    fun detectsPersonaNameInstruction() {
-        val instruction = PersonaInstructionDetector.detect("以后你叫小墨")
-
-        assertEquals("小墨", instruction?.name)
-    }
-
-    @Test
-    fun detectsPersonaRenameInstructionFromUserFraming() {
-        val instruction = PersonaInstructionDetector.detect("我还是给你取名叫芒果吧。")
-
-        assertEquals("芒果", instruction?.name)
-    }
-
-    @Test
-    fun detectsPersonaRenameInstructionWithChangeNameWording() {
-        val instruction = PersonaInstructionDetector.detect("把你改名为小芒果")
-
-        assertEquals("小芒果", instruction?.name)
-    }
-
-    @Test
-    fun detectsPersonaToneInstruction() {
-        val instruction = PersonaInstructionDetector.detect("你的语气要冷静、直接一点")
-
-        assertEquals("冷静、直接一点", instruction?.tone)
-    }
-
-    @Test
-    fun doesNotTreatUserAnswerPreferenceAsPersonaInstruction() {
-        val instruction = PersonaInstructionDetector.detect("以后回答我直接一点")
-
-        assertNull(instruction)
-    }
-
-    @Test
-    fun doesNotTreatUserAddressingRequestAsPersonaName() {
-        val instruction = PersonaInstructionDetector.detect("你叫我大王吧")
-
-        assertNull(instruction)
-        assertNull(PersonaInstructionDetector.detect("以后请称呼我为大王"))
-    }
-
-    @Test
-    fun appliesInstructionToPersonaWithoutDroppingExistingRules() {
+    fun appliesLlmInstructionToPersonaWithoutDroppingExistingRules() {
         val persona = Persona(
             id = "p1",
             name = "技术伙伴",
@@ -68,12 +24,5 @@ class PersonaInstructionDetectorTest {
         assertEquals("冷静、直接", updated.tone)
         assertEquals(listOf("结论先行"), updated.behaviorRules)
         assertTrue(updated.updatedAt >= persona.updatedAt)
-    }
-
-    @Test
-    fun identifiesPersonaLikeMemoryContent() {
-        assertTrue(PersonaInstructionDetector.looksLikePersonaMemory("用户希望 AI 名字叫小墨"))
-        assertTrue(PersonaInstructionDetector.looksLikePersonaMemory("助手的语气要冷静直接"))
-        assertTrue(!PersonaInstructionDetector.looksLikePersonaMemory("请你以后喊我大王"))
     }
 }

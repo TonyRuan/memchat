@@ -29,7 +29,7 @@ class MemoryExtractionSaver(
         }
 
         val existing = store.getActiveMemories()
-        val modelResult = filterPersonaInstructions(engine.extractMemories(messages, existing))
+        val modelResult = engine.extractMemories(messages, existing)
         val fallbackCandidates = if (modelResult.newMemories.isEmpty() && modelResult.updates.isEmpty()) {
             explicitMemoryCandidates(messages)
         } else {
@@ -49,10 +49,6 @@ class MemoryExtractionSaver(
         result.newMemories.forEach { candidate ->
             val content = candidate.content.trim()
             if (content.isBlank()) return@forEach
-            if (PersonaInstructionDetector.looksLikePersonaMemory(content)) {
-                AppLogger.d("MemoryExtraction", "Skipping persona instruction: ${content.take(40)}")
-                return@forEach
-            }
             if (store.isTombstoned(content, candidate.type)) {
                 AppLogger.d("MemoryExtraction", "Skipping tombstoned: ${content.take(40)}")
                 return@forEach
@@ -119,7 +115,6 @@ class MemoryExtractionSaver(
         return messages
             .filter { it.role == "user" }
             .mapNotNull { ExplicitMemorySignal.extractContent(it.content) }
-            .filterNot { PersonaInstructionDetector.looksLikePersonaMemory(it) }
             .filterNot { isSensitiveMemory(it) }
             .map {
                 com.memorychat.app.domain.model.MemoryCandidate(
@@ -131,17 +126,6 @@ class MemoryExtractionSaver(
                     reason = "explicit remember command"
                 )
             }
-    }
-
-    private fun filterPersonaInstructions(result: MemoryExtractionResult): MemoryExtractionResult {
-        return result.copy(
-            newMemories = result.newMemories.filterNot {
-                PersonaInstructionDetector.looksLikePersonaMemory(it.content)
-            },
-            updates = result.updates.filterNot {
-                PersonaInstructionDetector.looksLikePersonaMemory(it.newContent)
-            }
-        )
     }
 
     private fun classifyExplicitMemory(content: String): MemoryType {

@@ -1,5 +1,28 @@
 # MemoryChat Development Log
 
+## v1.0.53 (2026-06-01)
+
+### Changes
+- Removed deterministic Persona instruction matching from the chat and ADB Persona update path; nonblank messages are now classified by the LLM
+- Removed keyword gating before Persona classification so natural wording such as `给你改名字为比比拉布` is handled by semantic classification
+- Reduced `PersonaInstructionDetector` to applying LLM extraction results to the current Persona; regex detection and Persona-like memory text matching were removed
+- Removed Persona rule filtering from memory saving; the memory extraction model prompt remains responsible for discarding assistant Persona settings
+- Added regression coverage proving explicit assistant renames, user profile statements, user-addressing preferences, and natural rename wording all go through model classification
+- Updated the emulator smoke script default APK path to v1.0.53
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.PersonaInstructionExtractorTest" --tests "com.memorychat.app.domain.engine.PersonaInstructionDetectorTest" --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+- Android emulator QA on `emulator-5554`: installed v1.0.53 and launched `com.memorychat.app/.MainActivity`
+- ADB real-model Persona rename smoke: sent `给你改名字为比比拉布`; `persona_default` changed from `猪妞` to `比比拉布`, `Persona updated from message` was logged, and the assistant replied `我叫比比拉布`
+- ADB real-model non-update smoke: sent `你叫我啥`; `persona_default` stayed `比比拉布`, and no `Persona updated` log was emitted
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.53-debug.apk`
+
+---
+
 ## v1.0.52 (2026-06-01)
 
 ### Changes

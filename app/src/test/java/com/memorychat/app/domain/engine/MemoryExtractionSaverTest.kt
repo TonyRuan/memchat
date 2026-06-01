@@ -331,7 +331,7 @@ class MemoryExtractionSaverTest {
     }
 
     @Test
-    fun skipsPersonaInstructionMisclassifiedAsPreferenceByModel() = runTest {
+    fun savesModelMemoryOutputWithoutPersonaRuleFiltering() = runTest {
         val provider = FakeLlmProvider(
             completeResponses = listOf(
                 """
@@ -351,12 +351,13 @@ class MemoryExtractionSaverTest {
             messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "以后你叫小墨"))
         )
 
-        assertTrue(result.newMemories.isEmpty())
-        assertTrue(store.inserted.isEmpty())
+        assertEquals(1, result.newMemories.size)
+        assertEquals(1, store.inserted.size)
+        assertEquals("用户希望 AI 名字叫小墨", store.inserted.single().content)
     }
 
     @Test
-    fun explicitRememberDoesNotFallbackSavePersonaInstructionAsMemory() = runTest {
+    fun explicitRememberFallbackDoesNotApplyPersonaRuleFiltering() = runTest {
         val provider = FakeLlmProvider(completeResponses = listOf("学会了"))
         val store = FakeMemoryStore()
         val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
@@ -366,8 +367,8 @@ class MemoryExtractionSaverTest {
             messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "记住，你的名字叫小墨"))
         )
 
-        assertTrue(result.newMemories.isEmpty())
-        assertTrue(store.inserted.isEmpty())
+        assertEquals(1, result.newMemories.size)
+        assertEquals("你的名字叫小墨", store.inserted.single().content)
     }
 
     @Test

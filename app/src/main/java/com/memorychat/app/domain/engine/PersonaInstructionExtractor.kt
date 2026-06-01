@@ -13,8 +13,7 @@ class PersonaInstructionExtractor(
     private val modelName: String
 ) {
     suspend fun detect(content: String, currentPersona: Persona? = null): PersonaInstruction? {
-        PersonaInstructionDetector.detect(content)?.let { return it }
-        if (!shouldUseModelFallback(content, currentPersona)) return null
+        if (content.isBlank()) return null
 
         return try {
             val response = llmProvider.complete(
@@ -31,34 +30,6 @@ class PersonaInstructionExtractor(
         }
     }
 
-    private fun shouldUseModelFallback(content: String, currentPersona: Persona?): Boolean {
-        val text = content.trim().lowercase()
-        if (text.isBlank()) return false
-
-        val userProfileName = listOf("我叫", "我的名字", "我的昵称", "my name is")
-            .any { text.contains(it) }
-        if (userProfileName) return false
-
-        val userAddressingIntent = listOf(
-            "叫我", "称呼我", "喊我", "管我", "尊称我", "call me"
-        ).any { text.contains(it) }
-        val assistantReference = listOf(
-            "你", "你的", "给你", "把你", "帮你", "为你",
-            "助手", "ai", "agent", "assistant"
-        ).any { text.contains(it) }
-        val personaIntent = listOf(
-            "名字", "名称", "昵称", "称呼", "叫", "取名", "起名", "改名", "更名",
-            "改成", "改为", "换成", "换为", "语气", "风格", "说话方式", "角色", "身份", "性格", "人设", "规则"
-        ).any { text.contains(it) }
-        val implicitAssistantNickname = listOf("固定昵称", "固定名称", "以后昵称", "以后名称")
-            .any { text.contains(it) }
-        val subjectlessRename = currentPersona != null &&
-            listOf("改成", "改为", "换成", "换为").any { text.contains(it) } &&
-            text.length <= 24
-
-        return userAddressingIntent || (assistantReference && personaIntent) || implicitAssistantNickname || subjectlessRename
-    }
-
     private fun buildPrompt(content: String, currentPersona: Persona?): String {
         val personaContext = currentPersona?.let {
             """
@@ -70,7 +41,7 @@ Tone: ${it.tone}
         } ?: "Current assistant persona: (unknown)"
 
         return """
-You extract assistant persona instructions from a single user message.
+Classify whether a single user message updates the assistant persona.
 
 $personaContext
 
@@ -86,9 +57,11 @@ Return strict JSON only:
 }
 
 Rules:
+- Decide by semantic meaning, not by keyword matching.
 - Assistant persona means the user is naming or configuring the assistant, not describing the user.
 - The user may omit the subject when continuing to rename the current assistant persona, e.g. "改成猪妞吧".
-- If the message sets the assistant's name, nickname, role, tone, personality, behavior rules, or boundaries, return true.
+- If the message semantically sets the assistant's name, nickname, role, tone, personality, behavior rules, or boundaries, category is assistant_persona_update and is_persona_instruction is true.
+- Natural wording such as "给你改名字为比比拉布" is an assistant persona update.
 - If the user asks the assistant to call or address the user by a name, category is user_addressing_preference and is_persona_instruction is false.
 - If the user describes their own name, preference, or profile, category is user_profile and is_persona_instruction is false.
 - If the message is unrelated to assistant persona or user addressing/profile, category is other and is_persona_instruction is false.
