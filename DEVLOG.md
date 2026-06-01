@@ -1,5 +1,31 @@
 # MemoryChat Development Log
 
+## v1.0.56 (2026-06-01)
+
+### Changes
+- Added `docs/architecture/agent-tool-runtime.md` to document the OpenClaw/Hermes-inspired lightweight Agent tool runtime design
+- Added a structured `AgentDecisionEngine` that asks the LLM for allowlisted tool calls instead of running separate hard-coded Persona routing
+- Added `AgentToolExecutor` for local execution of `update_persona`, `save_memory`, `set_user_addressing_preference`, `get_current_time`, and reserved doc/recall tool results
+- Reused `MemoryExtractionSaver` for direct tool memory writes so tombstones, deduplication, similar-memory merging, and user-edited protections stay centralized
+- Updated Chat UI and ADB message flows to run Agent decisions before the final chat request and inject environment/tool results into the system prompt
+- Skipped post-turn background extraction for turns where the Agent memory tool already wrote memory, preventing duplicate direct-tool and explicit-fallback saves
+- Updated the emulator smoke script default APK path to v1.0.56
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.agent.AgentDecisionEngineTest" --tests "com.memorychat.app.domain.agent.AgentToolExecutorTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.agent.AgentToolExecutorTest"` (duplicate-extraction guard regression)
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+- Physical-device ADB smoke on `10AE2P094M002SL`: installed v1.0.56 and launched `com.memorychat.app/.MainActivity`
+- Physical-device Persona tool smoke: sent `你叫真机露露`; `persona_default` changed to `真机露露`, and the normal chat reply used the updated name
+- Physical-device addressing-preference smoke: sent `你叫我真机大王吧`; Persona stayed `真机露露`, and one active `PREFERENCE` memory was saved for the user addressing preference
+- Physical-device direct-memory smoke: sent `记住真机防重复编号是 AGENT-1056`; exactly one active memory containing `AGENT-1056` existed afterward, and logs showed `Extraction skipped: agent memory tool already wrote this turn`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.56-debug.apk`
+
+---
+
 ## v1.0.55 (2026-06-01)
 
 ### Changes

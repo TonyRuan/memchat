@@ -4,6 +4,10 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.memorychat.app.MemoryChatApp
+import com.memorychat.app.domain.agent.AgentDecision
+import com.memorychat.app.domain.agent.AgentDecisionEngine
+import com.memorychat.app.domain.agent.AgentPersonaStore
+import com.memorychat.app.domain.agent.AgentToolExecutor
 import com.memorychat.app.domain.model.*
 import com.memorychat.app.domain.provider.OpenAICompatibleProvider
 import com.memorychat.app.domain.engine.ChatTurnErrorPersister
@@ -13,9 +17,6 @@ import com.memorychat.app.domain.engine.MemoryExtractionStore
 import com.memorychat.app.domain.engine.MemoryExtractionTrigger
 import com.memorychat.app.domain.engine.MemoryExtractionTriggerPolicy
 import com.memorychat.app.domain.engine.MemoryEngine
-import com.memorychat.app.domain.engine.PersonaInstructionExtractor
-import com.memorychat.app.domain.engine.PersonaInstructionDetector
-import com.memorychat.app.domain.engine.PersonaUpdateAcknowledger
 import com.memorychat.app.util.AppLogger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -94,28 +95,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 // 加载当前会话绑定的 Persona
                 val (activeConv, loadedPersona) = ensureConversationPersona(conv)
                 val model = app.settingsDataStore.modelName.first()
-                val personaUpdate = applyPersonaInstructionIfNeeded(loadedPersona, content, provider, model)
-                val persona = personaUpdate.persona
-                AppLogger.i("ChatVM", "Persona loaded: ${persona?.name ?: "none"}")
+                AppLogger.i("ChatVM", "Persona loaded: ${loadedPersona.name}")
 
                 val userMsg = ChatMessage(conversationId = activeConv.id, role = "user", content = content)
                 app.conversationRepo.saveMessage(userMsg)
                 _messages.value = _messages.value + userMsg
 
-                if (personaUpdate.acknowledgement != null) {
-                    val assistantMsg = ChatMessage(
-                        conversationId = activeConv.id,
-                        role = "assistant",
-                        content = personaUpdate.acknowledgement
-                    )
-                    app.conversationRepo.saveMessage(assistantMsg)
-                    _messages.value = _messages.value + assistantMsg
-                    memoryEngine?.let { engine ->
-                        scheduleMemoryExtractionAfterTurn(engine, activeConv, userMsg)
-                    }
-                    finishGeneration()
-                    return@launch
-                }
+                val decision = AgentDecisionEngine(provider, model).decide(content, loadedPersona)
+                val toolExecution = executeAgentTools(decision, loadedPersona, activeConv, listOf(userMsg))
+                val persona = toolExecution.persona
+                AppLogger.i("ChatVM", "Agent tools: calls=${decision.toolCalls.size}, results=${toolExecution.toolResults.size}")
 
                 val memories = if (activeConv.useMemory) {
                     val activeMemories = app.memoryRepo.getActiveMemories()
@@ -125,7 +114,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     recall?.memories ?: emptyList()
                 } else emptyList()
 
-                val systemPrompt = buildSystemPrompt(memories, persona)
+                val systemPrompt = buildSystemPrompt(
+                    memories = memories,
+                    persona = persona,
+                    toolResults = toolExecution.toolResults,
+                    temporaryResponseFormat = decision.temporaryResponseFormat
+                )
                 val allMessages = _messages.value.map { ChatMessage(role = it.role, content = it.content) }.toMutableList()
                 if (systemPrompt.isNotBlank()) {
                     allMessages.add(0, ChatMessage(role = "system", content = systemPrompt))
@@ -147,7 +141,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                     app.conversationRepo.saveMessage(assistantMsg)
                                     _messages.value = _messages.value + assistantMsg
                                     AppLogger.d("ChatVM", "Message saved to DB and added to list")
-                                    memoryEngine?.let { engine ->
+                                    if (toolExecution.memoryWritten) {
+                                        saveExtractionWatermark(activeConv.id, listOf(userMsg, assistantMsg))
+                                        AppLogger.i("ChatVM", "Memory extraction skipped: agent memory tool already wrote this turn")
+                                    } else memoryEngine?.let { engine ->
                                         scheduleMemoryExtractionAfterTurn(engine, activeConv, userMsg)
                                     }
                                 }
@@ -212,36 +209,52 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun buildSystemPrompt(memories: List<Memory>, persona: Persona? = null): String {
-        return MemoryEngine.buildRecallPrompt(
+    private fun buildSystemPrompt(
+        memories: List<Memory>,
+        persona: Persona? = null,
+        toolResults: List<String> = emptyList(),
+        temporaryResponseFormat: String? = null
+    ): String {
+        val base = MemoryEngine.buildRecallPrompt(
             persona = persona,
             preferences = memories.filter { it.type == MemoryType.PREFERENCE },
             profile = memories.filter { it.type == MemoryType.PROFILE },
             projects = memories.filter { it.type == MemoryType.PROJECT },
             summaries = memories.filter { it.type == MemoryType.SUMMARY }
         )
+        return buildString {
+            append(base)
+            appendLine()
+            appendLine("[Environment]")
+            appendLine("Current time: ${java.time.Instant.ofEpochMilli(System.currentTimeMillis())}")
+            if (temporaryResponseFormat != null) {
+                appendLine("Temporary response format for this answer: $temporaryResponseFormat")
+            }
+            if (toolResults.isNotEmpty()) {
+                appendLine()
+                appendLine("[Tool Results]")
+                toolResults.forEach { appendLine("- $it") }
+            }
+        }
     }
 
-    private suspend fun applyPersonaInstructionIfNeeded(
+    private suspend fun executeAgentTools(
+        decision: AgentDecision,
         persona: Persona,
-        content: String,
-        provider: OpenAICompatibleProvider,
-        model: String
-    ): PersonaUpdateResult {
-        val instruction = PersonaInstructionExtractor(provider, model).detect(content, persona)
-            ?: return PersonaUpdateResult(persona = persona)
-        val updated = PersonaInstructionDetector.apply(persona, instruction)
-        app.personaRepo.savePersona(updated)
-        AppLogger.i("ChatVM", "Persona updated from user instruction: ${updated.id}")
-        return PersonaUpdateResult(
-            persona = updated,
-            acknowledgement = PersonaUpdateAcknowledger.acknowledge(instruction)
-        )
-    }
-
-    private data class PersonaUpdateResult(
-        val persona: Persona,
-        val acknowledgement: String? = null
+        conv: Conversation,
+        sourceMessages: List<ChatMessage>
+    ) = AgentToolExecutor(
+        personaStore = object : AgentPersonaStore {
+            override suspend fun savePersona(persona: Persona) {
+                app.personaRepo.savePersona(persona)
+            }
+        },
+        memoryStore = memoryExtractionStore()
+    ).execute(
+        decision = decision,
+        persona = persona,
+        conversation = conv,
+        sourceMessages = sourceMessages
     )
 
     private suspend fun ensureConversationPersona(conv: Conversation): Pair<Conversation, Persona> {

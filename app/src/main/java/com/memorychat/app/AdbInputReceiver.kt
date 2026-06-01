@@ -10,23 +10,27 @@ import com.memorychat.app.data.local.datastore.SettingsDataStore
 import com.memorychat.app.data.local.db.entity.MessageEntity
 import com.memorychat.app.data.repository.MemoryRepository
 import com.memorychat.app.data.repository.PersonaRepository
+import com.memorychat.app.domain.agent.AgentDecision
+import com.memorychat.app.domain.agent.AgentDecisionEngine
+import com.memorychat.app.domain.agent.AgentPersonaStore
+import com.memorychat.app.domain.agent.AgentToolExecutor
 import com.memorychat.app.domain.model.ChatMessage
 import com.memorychat.app.domain.model.ChatRequest
 import com.memorychat.app.domain.model.Conversation
 import com.memorychat.app.domain.model.Memory
+import com.memorychat.app.domain.model.MemoryRecallResult
 import com.memorychat.app.domain.model.MemoryType
 import com.memorychat.app.domain.provider.OpenAICompatibleProvider
 import com.memorychat.app.domain.engine.MemoryExtractionSaver
 import com.memorychat.app.domain.engine.MemoryExtractionStore
 import com.memorychat.app.domain.engine.MemoryExtractionTriggerPolicy
 import com.memorychat.app.domain.engine.MemoryEngine
-import com.memorychat.app.domain.engine.PersonaInstructionExtractor
-import com.memorychat.app.domain.engine.PersonaInstructionDetector
-import com.memorychat.app.domain.engine.PersonaUpdateAcknowledger
+import com.memorychat.app.domain.model.Persona
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.time.Instant
 
 class AdbInputReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -90,15 +94,8 @@ class AdbInputReceiver : BroadcastReceiver() {
                         )
                     }
                     var persona = conversation?.personaId?.let { personaRepo.getPersona(it) }
-                    var personaAcknowledgement: String? = null
-                    persona?.let { currentPersona ->
-                        PersonaInstructionExtractor(provider, model).detect(message, currentPersona)?.let { instruction ->
-                            val updatedPersona = PersonaInstructionDetector.apply(currentPersona, instruction)
-                            personaRepo.savePersona(updatedPersona)
-                            persona = updatedPersona
-                            personaAcknowledgement = PersonaUpdateAcknowledger.acknowledge(instruction)
-                            Log.i("AdbInput", "Persona updated from message: ${updatedPersona.id}")
-                        }
+                    if (persona == null && conversation != null) {
+                        persona = personaRepo.getOrCreateDefaultPersona()
                     }
                     if (conversationEntity == null) {
                         Log.w("AdbInput", "Conversation not found for conv_id=$conversationId")
@@ -106,17 +103,47 @@ class AdbInputReceiver : BroadcastReceiver() {
                         Log.i("AdbInput", "Conversation persona=${conversation?.personaId ?: "none"}, useMemory=${conversation?.useMemory}, generateMemory=${conversation?.generateMemory}")
                     }
 
-                    if (personaAcknowledgement != null) {
-                        val assistantMsg = MessageEntity(
-                            id = java.util.UUID.randomUUID().toString(),
-                            conversationId = conversationId,
-                            role = "assistant",
-                            content = personaAcknowledgement,
-                            createdAt = System.currentTimeMillis()
+                    val latestUserMessage = ChatMessage(
+                        id = userMsg.id,
+                        conversationId = conversationId,
+                        role = "user",
+                        content = userMsg.content,
+                        createdAt = userMsg.createdAt
+                    )
+                    val decision = AgentDecisionEngine(provider, model).decide(message, persona)
+                    val extractionStore = memoryExtractionStore(memoryRepo)
+                    if (persona != null && conversation != null) {
+                        val toolExecution = AgentToolExecutor(
+                            personaStore = object : AgentPersonaStore {
+                                override suspend fun savePersona(persona: Persona) {
+                                    personaRepo.savePersona(persona)
+                                }
+                            },
+                            memoryStore = extractionStore
+                        ).execute(
+                            decision = decision,
+                            persona = persona,
+                            conversation = conversation,
+                            sourceMessages = listOf(latestUserMessage)
                         )
-                        db.messageDao().insert(assistantMsg)
-                        Log.i("AdbInput", "[4/4] Persona acknowledgement: ${personaAcknowledgement?.take(80)}")
-                        Log.i("AdbInput", "=== DONE (persona_update=true) ===")
+                        persona = toolExecution.persona
+                        Log.i("AdbInput", "Agent tools: calls=${decision.toolCalls.size}, results=${toolExecution.toolResults.size}")
+                        runChatAndMemory(
+                            provider = provider,
+                            model = model,
+                            db = db,
+                            ds = ds,
+                            memoryRepo = memoryRepo,
+                            conversation = conversation,
+                            persona = persona,
+                            message = message,
+                            conversationId = conversationId,
+                            latestUserMessage = latestUserMessage,
+                            decision = decision,
+                            toolResults = toolExecution.toolResults,
+                            skipTurnMemoryExtraction = toolExecution.memoryWritten,
+                            extractionStore = extractionStore
+                        )
                         return@launch
                     }
 
@@ -250,6 +277,148 @@ class AdbInputReceiver : BroadcastReceiver() {
             } finally {
                 pendingResult.finish()
             }
+        }
+    }
+
+    private suspend fun runChatAndMemory(
+        provider: OpenAICompatibleProvider,
+        model: String,
+        db: AppDatabase,
+        ds: SettingsDataStore,
+        memoryRepo: MemoryRepository,
+        conversation: Conversation,
+        persona: Persona?,
+        message: String,
+        conversationId: String,
+        latestUserMessage: ChatMessage,
+        decision: AgentDecision,
+        toolResults: List<String>,
+        skipTurnMemoryExtraction: Boolean,
+        extractionStore: MemoryExtractionStore
+    ) {
+        Log.i("AdbInput", "[2/4] Memory recall start")
+        val activeMemories = if (conversation.useMemory) {
+            memoryRepo.getActiveMemories()
+        } else {
+            emptyList()
+        }
+        val memoryEngine = MemoryEngine(provider, model)
+        val recall = if (activeMemories.isNotEmpty()) {
+            memoryEngine.recall(message, activeMemories, persona)
+        } else {
+            MemoryRecallResult()
+        }
+        Log.i("AdbInput", "  Recall: scene=${recall.scene}, matched=${recall.memories.size}")
+        recall.memories.forEach { mem ->
+            Log.i("AdbInput", "  -> [${mem.type}] ${mem.content.take(50)}")
+        }
+
+        val basePrompt = MemoryEngine.buildRecallPrompt(
+            persona = persona,
+            preferences = recall.memories.filter { it.type == MemoryType.PREFERENCE },
+            profile = recall.memories.filter { it.type == MemoryType.PROFILE },
+            projects = recall.memories.filter { it.type == MemoryType.PROJECT },
+            summaries = recall.memories.filter { it.type == MemoryType.SUMMARY }
+        )
+        val systemPrompt = decorateSystemPrompt(basePrompt, decision, toolResults)
+        val messages = mutableListOf(
+            ChatMessage(role = "system", content = systemPrompt),
+            ChatMessage(role = "user", content = message)
+        )
+        Log.i("AdbInput", "  System prompt injected (${systemPrompt.length} chars)")
+        Log.i("AdbInput", "[3/4] Calling API with ${messages.size} messages (recall=${recall.memories.size})")
+
+        val response = provider.complete(
+            ChatRequest(
+                messages = messages,
+                model = model,
+                stream = false
+            )
+        )
+        Log.i("AdbInput", "[4/4] API response: ${response.content.take(80)}")
+
+        val assistantCreatedAt = System.currentTimeMillis()
+        db.messageDao().insert(
+            MessageEntity(
+                id = java.util.UUID.randomUUID().toString(),
+                conversationId = conversationId,
+                role = "assistant",
+                content = response.content,
+                createdAt = assistantCreatedAt
+            )
+        )
+
+        if (skipTurnMemoryExtraction) {
+            ds.saveMemoryExtractionWatermark(conversationId, maxOf(latestUserMessage.createdAt, assistantCreatedAt))
+            Log.i("AdbInput", "Extraction skipped: agent memory tool already wrote this turn")
+            Log.i("AdbInput", "=== DONE (recall=${recall.memories.size}) ===")
+            return
+        }
+
+        if (conversation.generateMemory) {
+            val watermark = ds.getMemoryExtractionWatermark(conversationId)
+            val unextractedMessages = db.messageDao()
+                .getByConversationIdAfter(conversationId, watermark)
+                .map { entity ->
+                    ChatMessage(
+                        id = entity.id,
+                        conversationId = entity.conversationId,
+                        role = entity.role,
+                        content = entity.content,
+                        createdAt = entity.createdAt
+                    )
+                }
+            val trigger = MemoryExtractionTriggerPolicy()
+                .afterAssistantTurn(unextractedMessages, latestUserMessage)
+            if (trigger == null) {
+                Log.i("AdbInput", "Extraction deferred: unextracted=${unextractedMessages.size}")
+                Log.i("AdbInput", "=== DONE (recall=${recall.memories.size}) ===")
+                return
+            }
+            val extraction = MemoryExtractionSaver(MemoryEngine(provider, model), extractionStore)
+                .extractAndSave(
+                    conversation,
+                    unextractedMessages
+                )
+            unextractedMessages.maxOfOrNull { it.createdAt }?.let { extractedAt ->
+                ds.saveMemoryExtractionWatermark(conversationId, extractedAt)
+            }
+            Log.i("AdbInput", "Extraction: trigger=$trigger, new=${extraction.newMemories.size}, updates=${extraction.updates.size}")
+        } else {
+            Log.i("AdbInput", "Extraction skipped: generateMemory=false")
+        }
+        Log.i("AdbInput", "=== DONE (recall=${recall.memories.size}) ===")
+    }
+
+    private fun decorateSystemPrompt(
+        basePrompt: String,
+        decision: AgentDecision,
+        toolResults: List<String>
+    ): String {
+        return buildString {
+            append(basePrompt)
+            appendLine()
+            appendLine("[Environment]")
+            appendLine("Current time: ${Instant.now()}")
+            decision.temporaryResponseFormat?.let {
+                appendLine("Temporary response format for this answer: $it")
+            }
+            if (toolResults.isNotEmpty()) {
+                appendLine()
+                appendLine("[Tool Results]")
+                toolResults.forEach { appendLine("- $it") }
+            }
+        }
+    }
+
+    private fun memoryExtractionStore(memoryRepo: MemoryRepository): MemoryExtractionStore {
+        return object : MemoryExtractionStore {
+            override suspend fun getActiveMemories(): List<Memory> = memoryRepo.getActiveMemories()
+            override suspend fun isTombstoned(content: String, type: MemoryType): Boolean =
+                memoryRepo.isTombstoned(content, type)
+            override suspend fun insert(memory: Memory) = memoryRepo.insert(memory)
+            override suspend fun getById(id: String): Memory? = memoryRepo.getById(id)
+            override suspend fun update(memory: Memory) = memoryRepo.update(memory)
         }
     }
 }

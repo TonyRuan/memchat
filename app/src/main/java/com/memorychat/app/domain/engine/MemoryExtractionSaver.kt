@@ -16,7 +16,7 @@ interface MemoryExtractionStore {
 }
 
 class MemoryExtractionSaver(
-    private val engine: MemoryEngine,
+    private val engine: MemoryEngine?,
     private val store: MemoryExtractionStore
 ) {
     suspend fun extractAndSave(
@@ -29,7 +29,7 @@ class MemoryExtractionSaver(
         }
 
         val existing = store.getActiveMemories()
-        val modelResult = engine.extractMemories(messages, existing)
+        val modelResult = engine?.extractMemories(messages, existing) ?: MemoryExtractionResult()
         val fallbackCandidates = if (modelResult.newMemories.isEmpty() && modelResult.updates.isEmpty()) {
             explicitMemoryCandidates(messages)
         } else {
@@ -41,8 +41,24 @@ class MemoryExtractionSaver(
         } else {
             modelResult
         }
-        AppLogger.i("MemoryExtraction", "Extracted: new=${result.newMemories.size}, updates=${result.updates.size}")
+        return saveResult(conversation, messages, result, existing)
+    }
 
+    suspend fun saveResult(
+        conversation: Conversation,
+        messages: List<ChatMessage>,
+        result: MemoryExtractionResult
+    ): MemoryExtractionResult {
+        return saveResult(conversation, messages, result, store.getActiveMemories())
+    }
+
+    private suspend fun saveResult(
+        conversation: Conversation,
+        messages: List<ChatMessage>,
+        result: MemoryExtractionResult,
+        existing: List<Memory>
+    ): MemoryExtractionResult {
+        AppLogger.i("MemoryExtraction", "Extracted: new=${result.newMemories.size}, updates=${result.updates.size}")
         val fallbackSourceIds = messages.map { it.id }
         val activeMemories = existing.toMutableList()
         val seenNewContents = existing.map { memoryKey(it.type, it.content) }.toMutableSet()
