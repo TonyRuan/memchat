@@ -1,5 +1,24 @@
 # MemoryChat Development Log
 
+## v1.0.58 (2026-06-01)
+
+### Changes
+- Updated Chat UI web-search turns to use MiMo's streaming search path after plugin activation; streaming now carries the official `web_search` tool request and receives synthesized content
+- Kept the ADB/non-streaming fallback path because current non-streaming MiMo responses still return an empty content plus `tool_calls[web_search]`
+- Added provider coverage proving streaming requests include the MiMo `web_search` tool schema
+- Updated the emulator smoke script default APK path to v1.0.58
+
+### Verification
+- Direct MiMo API check after Web Search Plugin activation: non-streaming still returned empty content plus `web_search` tool call, while streaming returned content chunks after search
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.provider.OpenAICompatibleProviderTest.streamAddsMimoWebSearchToolWhenEnabled"`
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.58-debug.apk`
+
+---
+
 ## v1.0.57 (2026-06-01)
 
 ### Changes

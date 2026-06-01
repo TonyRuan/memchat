@@ -2,6 +2,7 @@ package com.memorychat.app.domain.provider
 
 import com.memorychat.app.domain.model.ChatMessage
 import com.memorychat.app.domain.model.ChatRequest
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -125,6 +126,41 @@ class OpenAICompatibleProviderTest {
             }
             assertTrue(secondBody.contains("Web Search Results"))
             assertTrue(secondBody.contains("MiMo V2.5 was updated today"))
+        }
+    }
+
+    @Test
+    fun streamAddsMimoWebSearchToolWhenEnabled() = runTest {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse()
+                    .setHeader("Content-Type", "text/event-stream")
+                    .setBody(
+                        """
+                        data: {"choices":[{"delta":{"content":"ok"}}]}
+
+                        data: [DONE]
+
+                        """.trimIndent()
+                    )
+            )
+            server.start()
+            val provider = OpenAICompatibleProvider("key", server.url("/v1").toString().trimEnd('/'), "model")
+
+            val chunks = provider.streamChat(
+                ChatRequest(
+                    messages = listOf(ChatMessage(role = "user", content = "latest news")),
+                    model = "model",
+                    stream = true,
+                    enableWebSearch = true
+                )
+            ).toList()
+
+            assertEquals("ok", chunks.first().content)
+            val body = server.takeRequest().body.readUtf8()
+            assertTrue(body.contains(""""tools""""))
+            assertTrue(body.contains(""""web_search""""))
+            assertTrue(body.contains(""""tool_choice":"auto""""))
         }
     }
 }
