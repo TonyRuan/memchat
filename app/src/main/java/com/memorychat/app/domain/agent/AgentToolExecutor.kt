@@ -83,6 +83,14 @@ class AgentToolExecutor(
                             results += "[tool:search_docs] query=\"$query\" result=\"文档查询接口已预留；当前版本未找到本地索引结果。\""
                         }
                     }
+                    "web_search" -> {
+                        val query = call.stringArg("query")?.trim().orEmpty()
+                        results += if (query.isNotBlank()) {
+                            "[tool:web_search] enabled for final model request; query=\"$query\""
+                        } else {
+                            "[tool:web_search] enabled for final model request"
+                        }
+                    }
                     "recall_memory" -> {
                         results += "[tool:recall_memory] handled by normal memory recall"
                     }

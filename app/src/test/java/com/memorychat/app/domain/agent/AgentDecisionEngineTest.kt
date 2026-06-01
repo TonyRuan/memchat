@@ -93,7 +93,32 @@ class AgentDecisionEngineTest {
         assertTrue(prompt.contains("Allowed tools"))
         assertTrue(prompt.contains("update_persona"))
         assertTrue(prompt.contains("set_user_addressing_preference"))
+        assertTrue(prompt.contains("web_search"))
         assertTrue(prompt.contains("Decide by semantic meaning"))
         assertTrue(prompt.contains("Current assistant persona"))
+    }
+
+    @Test
+    fun keepsWebSearchToolCall() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "tool_calls": [
+                    {"name": "web_search", "arguments": {"query": "latest Android news"}}
+                  ],
+                  "should_continue_chat": true
+                }
+                """.trimIndent()
+            )
+        )
+
+        val decision = AgentDecisionEngine(provider, "fake-model").decide(
+            userMessage = "查一下 Android 最新新闻",
+            currentPersona = Persona(name = "牛牛")
+        )
+
+        assertEquals("web_search", decision.toolCalls.single().name)
+        assertEquals("latest Android news", decision.toolCalls.single().stringArg("query"))
     }
 }

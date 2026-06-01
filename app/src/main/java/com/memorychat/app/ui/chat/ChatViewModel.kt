@@ -130,7 +130,35 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 streamJob = viewModelScope.launch {
                     var accumulated = ""
                     try {
-                        provider.streamChat(ChatRequest(messages = allMessages, model = model, stream = true)).collect { chunk ->
+                        if (decision.usesWebSearch()) {
+                            val response = provider.complete(
+                                ChatRequest(
+                                    messages = allMessages,
+                                    model = model,
+                                    stream = false,
+                                    enableWebSearch = true
+                                )
+                            )
+                            val finalContent = response.content
+                            if (finalContent.isNotBlank()) {
+                                val assistantMsg = ChatMessage(conversationId = activeConv.id, role = "assistant", content = finalContent)
+                                app.conversationRepo.saveMessage(assistantMsg)
+                                _messages.value = _messages.value + assistantMsg
+                                if (toolExecution.memoryWritten) {
+                                    saveExtractionWatermark(activeConv.id, listOf(userMsg, assistantMsg))
+                                    AppLogger.i("ChatVM", "Memory extraction skipped: agent memory tool already wrote this turn")
+                                } else memoryEngine?.let { engine ->
+                                    scheduleMemoryExtractionAfterTurn(engine, activeConv, userMsg)
+                                }
+                            }
+                        } else provider.streamChat(
+                            ChatRequest(
+                                messages = allMessages,
+                                model = model,
+                                stream = true,
+                                enableWebSearch = false
+                            )
+                        ).collect { chunk ->
                             if (chunk.done) {
                                 val finalContent = accumulated
                                 AppLogger.i("ChatVM", "Stream done, length=${finalContent.length}")

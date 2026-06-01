@@ -1,5 +1,30 @@
 # MemoryChat Development Log
 
+## v1.0.57 (2026-06-01)
+
+### Changes
+- Added MiMo native web search support through the OpenAI-compatible Chat Completions request body
+- Added `enableWebSearch` to `ChatRequest`; when enabled, requests include MiMo's `web_search` function tool schema and `tool_choice=auto`
+- Added `web_search` to the Agent tool router so search-like user intents can enable provider-side live web search for the final answer
+- Added a fallback for MiMo responses that return `tool_calls[web_search]` with empty content: the app extracts the search query, runs a lightweight web search, and sends the results back through MiMo for final synthesis
+- Added a Baidu fallback after DuckDuckGo search timeouts so physical-device searches can still return a synthesized answer in China-network conditions
+- Updated Chat UI search turns to use non-streaming completion so web-search fallback can complete before the assistant message is saved
+- Updated ADB completion flows to pass the web search flag into model requests
+- Added provider and Agent routing tests for the MiMo web search request shape
+- Updated the emulator smoke script default APK path to v1.0.57
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.provider.OpenAICompatibleProviderTest.completeAddsMimoWebSearchToolWhenEnabled" --tests "com.memorychat.app.domain.agent.AgentDecisionEngineTest.keepsWebSearchToolCall" --tests "com.memorychat.app.domain.agent.AgentDecisionEngineTest.promptDefinesAllowedToolsAndSemanticRouting"` (RED failed before implementation, then passed)
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.provider.OpenAICompatibleProviderTest.completeRunsFallbackSearchWhenMimoReturnsWebSearchToolCall" --tests "com.memorychat.app.domain.provider.OpenAICompatibleProviderTest.completeAddsMimoWebSearchToolWhenEnabled" --tests "com.memorychat.app.domain.agent.AgentDecisionEngineTest.keepsWebSearchToolCall"`
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+- Physical-device ADB search smoke on `10AE2P094M002SL`: installed v1.0.57, sent `联网搜一下MiMo V2.5`, and confirmed a non-empty assistant answer was saved after the web-search fallback path
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.57-debug.apk`
+
+---
+
 ## v1.0.56 (2026-06-01)
 
 ### Changes

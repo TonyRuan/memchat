@@ -13,7 +13,9 @@ data class AgentDecision(
     val toolCalls: List<AgentToolCall> = emptyList(),
     val temporaryResponseFormat: String? = null,
     val shouldContinueChat: Boolean = true
-)
+) {
+    fun usesWebSearch(): Boolean = toolCalls.any { it.name == "web_search" }
+}
 
 data class AgentToolCall(
     val name: String,
@@ -66,6 +68,7 @@ $personaContext
 Allowed tools:
 - get_current_time: read the device current date/time for this answer.
 - search_docs: read app/project documentation for this answer only.
+- web_search: search the live web for current public information using the model provider's built-in search tool.
 - recall_memory: request relevant long-term memories when needed.
 - update_persona: update the assistant persona name, role, tone, behavior rules, or boundaries.
 - save_memory: save a stable long-term user/profile/project/preference fact.
@@ -84,6 +87,7 @@ JSON schema:
     {"name": "save_memory", "arguments": {"type": "profile|preference|project|summary", "content": "...", "importance": 3, "confidence": 0.8}},
     {"name": "set_user_addressing_preference", "arguments": {"addressing": "..."}},
     {"name": "search_docs", "arguments": {"query": "..."}},
+    {"name": "web_search", "arguments": {"query": "..."}},
     {"name": "get_current_time", "arguments": {}}
   ],
   "temporary_response_format": "markdown|plain|null",
@@ -169,6 +173,7 @@ $userMessage
         val allowedTools = setOf(
             "get_current_time",
             "search_docs",
+            "web_search",
             "recall_memory",
             "update_persona",
             "save_memory",

@@ -332,7 +332,8 @@ class AdbInputReceiver : BroadcastReceiver() {
             ChatRequest(
                 messages = messages,
                 model = model,
-                stream = false
+                stream = false,
+                enableWebSearch = decision.usesWebSearch()
             )
         )
         Log.i("AdbInput", "[4/4] API response: ${response.content.take(80)}")

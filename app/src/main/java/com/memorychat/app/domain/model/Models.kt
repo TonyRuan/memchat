@@ -64,7 +64,8 @@ data class ChatMessage(
 data class ChatRequest(
     val messages: List<ChatMessage>,
     val model: String,
-    val stream: Boolean = true
+    val stream: Boolean = true,
+    val enableWebSearch: Boolean = false
 )
 
 data class ChatChunk(

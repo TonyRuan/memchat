@@ -13,6 +13,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 interface LlmProvider {
@@ -24,7 +25,8 @@ class OpenAICompatibleProvider(
     private val apiKey: String,
     private val baseUrl: String,
     private val modelName: String,
-    private val maxTokens: Int = 8192
+    private val maxTokens: Int = 8192,
+    private val webSearchClient: WebSearchClient = DuckDuckGoWebSearchClient()
 ) : LlmProvider {
 
     private val client = OkHttpClient.Builder()
@@ -45,13 +47,39 @@ class OpenAICompatibleProvider(
                 })
             }
             add("messages", msgs)
+            if (request.enableWebSearch) {
+                add("tools", webSearchTools())
+                addProperty("tool_choice", "auto")
+            }
         }
         return body.toString()
     }
 
+    private fun webSearchTools(): com.google.gson.JsonArray {
+        return com.google.gson.JsonArray().apply {
+            add(JsonObject().apply {
+                addProperty("type", "function")
+                add("function", JsonObject().apply {
+                    addProperty("name", "web_search")
+                    addProperty("description", "Search the web for current information")
+                    add("parameters", JsonObject().apply {
+                        addProperty("type", "object")
+                        add("properties", JsonObject().apply {
+                            add("query", JsonObject().apply {
+                                addProperty("type", "string")
+                                addProperty("description", "The search query")
+                            })
+                        })
+                        add("required", com.google.gson.JsonArray().apply { add("query") })
+                    })
+                })
+            })
+        }
+    }
+
     override fun streamChat(request: ChatRequest): Flow<ChatChunk> = flow {
         val body = buildRequestBody(request, true)
-        AppLogger.i("LlmProvider", "Stream request: model=${request.model}")
+        AppLogger.i("LlmProvider", "Stream request: model=${request.model}, webSearch=${request.enableWebSearch}")
 
         val httpRequest = Request.Builder()
             .url("$baseUrl/chat/completions")
@@ -122,6 +150,18 @@ class OpenAICompatibleProvider(
 
     override suspend fun complete(request: ChatRequest): ChatResponse {
         return try {
+            completeInternal(request, allowWebSearchFallback = true)
+        } catch (e: Exception) {
+            AppLogger.e("LlmProvider", "complete() failed: ${e.javaClass.simpleName}: ${e.message}")
+            throw e
+        }
+    }
+
+    private suspend fun completeInternal(
+        request: ChatRequest,
+        allowWebSearchFallback: Boolean
+    ): ChatResponse {
+        return try {
             val body = buildRequestBody(request, false)
             val httpRequest = Request.Builder()
                 .url("$baseUrl/chat/completions")
@@ -146,6 +186,33 @@ class OpenAICompatibleProvider(
                     val message = choices[0].asJsonObject?.getAsJsonObject("message")
                     if (message != null && message.has("content")) {
                         val content = message.get("content")?.asString ?: ""
+                        if (content.isBlank() && request.enableWebSearch && allowWebSearchFallback) {
+                            val query = extractWebSearchQuery(message)
+                            if (!query.isNullOrBlank()) {
+                                AppLogger.i("LlmProvider", "Running fallback web search: ${query.take(80)}")
+                                val searchResults = runCatching {
+                                    webSearchClient.search(query)
+                                }.getOrElse { error ->
+                                    "Search failed: ${error.javaClass.simpleName}: ${error.message}"
+                                }
+                                return completeInternal(
+                                    request.copy(
+                                        messages = request.messages + ChatMessage(
+                                            role = "system",
+                                            content = """
+[Web Search Results]
+$searchResults
+
+Use the search results above to answer the user. If the results are empty or insufficient, say so clearly.
+""".trimIndent()
+                                        ),
+                                        stream = false,
+                                        enableWebSearch = false
+                                    ),
+                                    allowWebSearchFallback = false
+                                )
+                            }
+                        }
                         return ChatResponse(content = content)
                     }
                 }
@@ -156,9 +223,117 @@ class OpenAICompatibleProvider(
                 throw IllegalStateException("Failed to parse completion response", e)
             }
         } catch (e: Exception) {
-            AppLogger.e("LlmProvider", "complete() failed: ${e.javaClass.simpleName}: ${e.message}")
             throw e
         }
+    }
+
+    private fun extractWebSearchQuery(message: JsonObject): String? {
+        val toolCalls = message.getAsJsonArray("tool_calls") ?: return null
+        toolCalls.forEach { element ->
+            val call = element.asJsonObject
+            val function = call.getAsJsonObject("function") ?: return@forEach
+            if (function.get("name")?.asString != "web_search") return@forEach
+            val args = function.get("arguments")?.asString ?: return@forEach
+            return runCatching {
+                JsonParser.parseString(args).asJsonObject.get("query")?.asString
+            }.getOrNull()
+        }
+        return null
+    }
+}
+
+interface WebSearchClient {
+    fun search(query: String): String
+}
+
+class DuckDuckGoWebSearchClient : WebSearchClient {
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    override fun search(query: String): String {
+        val duckResult = runCatching { searchDuckDuckGo(query) }.getOrDefault("")
+        if (duckResult.isNotBlank()) return duckResult
+        val baiduResult = runCatching { searchBaidu(query) }.getOrDefault("")
+        return baiduResult.ifBlank { "No useful search result returned for query: $query" }
+    }
+
+    private fun searchDuckDuckGo(query: String): String {
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val httpRequest = Request.Builder()
+            .url("https://api.duckduckgo.com/?q=$encoded&format=json&no_html=1&skip_disambig=1")
+            .addHeader("Accept", "application/json")
+            .build()
+        client.newCall(httpRequest).execute().use { response ->
+            if (!response.isSuccessful) {
+                return "Search failed: HTTP ${response.code}"
+            }
+            val body = response.body?.string().orEmpty()
+            return parseDuckDuckGoResult(body)
+        }
+    }
+
+    private fun searchBaidu(query: String): String {
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val httpRequest = Request.Builder()
+            .url("https://www.baidu.com/s?wd=$encoded&rn=5")
+            .addHeader("User-Agent", "Mozilla/5.0 (Android) MemoryChat/1.0")
+            .build()
+        client.newCall(httpRequest).execute().use { response ->
+            if (!response.isSuccessful) {
+                return "Search failed: HTTP ${response.code}"
+            }
+            val body = response.body?.string().orEmpty()
+            return parseBaiduHtml(body)
+        }
+    }
+
+    private fun parseDuckDuckGoResult(body: String): String {
+        val obj = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull() ?: return ""
+        val lines = mutableListOf<String>()
+        obj.get("AbstractText")?.takeUnless { it.isJsonNull }?.asString?.takeIf { it.isNotBlank() }?.let {
+            lines += "Abstract: $it"
+        }
+        obj.get("AbstractURL")?.takeUnless { it.isJsonNull }?.asString?.takeIf { it.isNotBlank() }?.let {
+            lines += "Source: $it"
+        }
+        obj.getAsJsonArray("RelatedTopics")?.take(5)?.forEach { topic ->
+            val topicObj = topic.asJsonObject
+            topicObj.get("Text")?.takeUnless { it.isJsonNull }?.asString?.takeIf { it.isNotBlank() }?.let {
+                lines += "- $it"
+            }
+            topicObj.getAsJsonArray("Topics")?.take(3)?.forEach { nested ->
+                nested.asJsonObject.get("Text")?.takeUnless { it.isJsonNull }?.asString?.takeIf { text -> text.isNotBlank() }?.let {
+                    lines += "- $it"
+                }
+            }
+        }
+        return lines.distinct().joinToString("\n")
+    }
+
+    private fun parseBaiduHtml(body: String): String {
+        val compact = body
+            .replace(Regex("\\s+"), " ")
+            .replace("&nbsp;", " ")
+        val titleRegex = Regex("<h3[^>]*>\\s*<a[^>]*>(.*?)</a>\\s*</h3>", RegexOption.IGNORE_CASE)
+        return titleRegex.findAll(compact)
+            .map { cleanHtml(it.groupValues[1]) }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(5)
+            .map { "- $it" }
+            .joinToString("\n")
+    }
+
+    private fun cleanHtml(value: String): String {
+        return value
+            .replace(Regex("<[^>]+>"), "")
+            .replace("&quot;", "\"")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .trim()
     }
 }
 
