@@ -1,5 +1,29 @@
 # MemoryChat Development Log
 
+## v1.0.43 (2026-06-01)
+
+### Changes
+- Changed automatic memory extraction from every completed assistant turn to a background trigger policy
+- Explicit memory commands like "记住/remember" still trigger immediate background extraction
+- Ordinary conversation turns now batch extraction until 20 completed unextracted turns
+- Leaving a chat screen flushes pending unextracted messages in the background
+- Added a per-conversation DataStore extraction watermark so successful extraction only processes new messages
+- Aligned the ADB debug message path with the same extraction trigger policy and watermark
+- Updated the emulator smoke script default APK path to v1.0.43
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.MemoryExtractionTriggerPolicyTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.MemoryExtractionTriggerPolicyTest" --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest"`
+- `.\gradlew.bat test`
+- `.\gradlew.bat connectedDebugAndroidTest`
+- `.\gradlew.bat assembleDebug`
+- Sub-agent emulator ADB validation on `emulator-5554`: ordinary message logged `Extraction deferred: unextracted=2` and created no memories; explicit `记住，批量策略验证码是 MX1043` logged `trigger=EXPLICIT_MEMORY, new=1, updates=0` and created one active memory; latest conversation had `user=2`, `assistant=2`, and no duplicate assistant groups
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.43-debug.apk`
+
+---
+
 ## v1.0.42 (2026-06-01)
 
 ### Changes

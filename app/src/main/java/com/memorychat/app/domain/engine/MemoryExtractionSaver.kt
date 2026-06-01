@@ -92,7 +92,7 @@ class MemoryExtractionSaver(
     private fun explicitMemoryCandidates(messages: List<ChatMessage>): List<com.memorychat.app.domain.model.MemoryCandidate> {
         return messages
             .filter { it.role == "user" }
-            .mapNotNull { extractExplicitMemoryContent(it.content) }
+            .mapNotNull { ExplicitMemorySignal.extractContent(it.content) }
             .filterNot { isSensitiveMemory(it) }
             .map {
                 com.memorychat.app.domain.model.MemoryCandidate(
@@ -104,27 +104,6 @@ class MemoryExtractionSaver(
                     reason = "explicit remember command"
                 )
             }
-    }
-
-    private fun extractExplicitMemoryContent(content: String): String? {
-        val trimmed = content.trim()
-        val patterns = listOf(
-            Regex("(?i)please\\s+remember(?:\\s+that)?[:：\\s]+(.+)"),
-            Regex("(?i)remember(?:\\s+that|\\s+this)?[:：\\s]+(.+)"),
-            Regex("请?帮?我?记住[:：\\s]*(.+)"),
-            Regex("记一下[:：\\s]*(.+)"),
-            Regex("以后记得[:：\\s]*(.+)"),
-            Regex("把(.+?)(?:记下来|加入记忆|加到记忆|写入记忆|存到记忆)")
-        )
-
-        val raw = patterns.firstNotNullOfOrNull { pattern ->
-            pattern.find(trimmed)?.groupValues?.getOrNull(1)
-        } ?: return null
-
-        return raw
-            .trim()
-            .trim('。', '.', '，', ',', '：', ':', '"', '\'', '“', '”')
-            .takeIf { it.isNotBlank() }
     }
 
     private fun classifyExplicitMemory(content: String): MemoryType {

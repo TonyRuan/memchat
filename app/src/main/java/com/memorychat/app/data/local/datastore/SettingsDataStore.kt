@@ -9,6 +9,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.memorychat.app.BuildConfig
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
@@ -82,6 +83,14 @@ class SettingsDataStore(private val context: Context) {
     suspend fun saveDefaultGenerateMemory(value: Boolean) { context.dataStore.edit { it[DEFAULT_GENERATE_MEMORY] = value } }
     suspend fun saveDefaultPersonaId(value: String) { context.dataStore.edit { it[DEFAULT_PERSONA_ID] = value } }
     suspend fun saveMaxTokens(value: Int) { context.dataStore.edit { it[MAX_TOKENS] = value } }
+    suspend fun getMemoryExtractionWatermark(conversationId: String): Long {
+        val key = longPreferencesKey("memory_extraction_watermark_$conversationId")
+        return context.dataStore.data.map { it[key] ?: 0L }.first()
+    }
+    suspend fun saveMemoryExtractionWatermark(conversationId: String, value: Long) {
+        val key = longPreferencesKey("memory_extraction_watermark_$conversationId")
+        context.dataStore.edit { it[key] = value }
+    }
 
     // API Key save uses EncryptedSharedPreferences
     suspend fun saveApiKey(value: String) {

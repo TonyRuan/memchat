@@ -10,6 +10,8 @@ import com.memorychat.app.domain.engine.ChatTurnErrorPersister
 import com.memorychat.app.domain.engine.ConversationMessageStore
 import com.memorychat.app.domain.engine.MemoryExtractionSaver
 import com.memorychat.app.domain.engine.MemoryExtractionStore
+import com.memorychat.app.domain.engine.MemoryExtractionTrigger
+import com.memorychat.app.domain.engine.MemoryExtractionTriggerPolicy
 import com.memorychat.app.domain.engine.MemoryEngine
 import com.memorychat.app.util.AppLogger
 import kotlinx.coroutines.CancellationException
@@ -41,7 +43,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var llmProvider: OpenAICompatibleProvider? = null
     private var memoryEngine: MemoryEngine? = null
     private var streamJob: Job? = null
+    private var memoryExtractionJob: Job? = null
     private val sendGate = GenerationSendGate()
+    private val extractionPolicy = MemoryExtractionTriggerPolicy()
 
     fun loadConversation(conversationId: String) {
         viewModelScope.launch {
@@ -124,7 +128,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                     _messages.value = _messages.value + assistantMsg
                                     AppLogger.d("ChatVM", "Message saved to DB and added to list")
                                     memoryEngine?.let { engine ->
-                                        extractMemoriesForMessages(engine, conv, listOf(userMsg, assistantMsg))
+                                        scheduleMemoryExtractionAfterTurn(engine, conv, userMsg)
                                     }
                                 }
                             } else {
@@ -222,6 +226,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _messages.value = freshMessages
             AppLogger.i("ChatVM", "Reloaded ${freshMessages.size} messages for extraction")
             val result = extractMemoriesForMessages(engine, conv, freshMessages)
+            if (result == null) {
+                _memoryExtractionStatus.value = "记忆整理失败，聊天记录已保留"
+                return@launch
+            }
+            saveExtractionWatermark(conv.id, freshMessages)
             _memoryExtractionStatus.value = if (result.newMemories.isNotEmpty() || result.updates.isNotEmpty()) {
                 "记忆整理完成：新增 ${result.newMemories.size} 条，更新 ${result.updates.size} 条"
             } else {
@@ -230,16 +239,93 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun flushPendingMemoryExtraction() {
+        val engine = memoryEngine ?: return
+        val conv = _conversation.value ?: return
+        scheduleMemoryExtraction(engine, conv, MemoryExtractionTrigger.CONVERSATION_EXIT)
+    }
+
+    private fun scheduleMemoryExtractionAfterTurn(
+        engine: MemoryEngine,
+        conv: Conversation,
+        userMsg: ChatMessage
+    ) {
+        if (!conv.generateMemory) return
+        if (memoryExtractionJob?.isActive == true) {
+            AppLogger.i("ChatVM", "Memory extraction check skipped: job already active")
+            return
+        }
+        memoryExtractionJob = app.launchBackground {
+            val unextractedMessages = getUnextractedMessages(conv.id)
+            val trigger = extractionPolicy.afterAssistantTurn(unextractedMessages, userMsg) ?: run {
+                AppLogger.i("ChatVM", "Memory extraction deferred: unextracted=${unextractedMessages.size}")
+                return@launchBackground
+            }
+            runBackgroundMemoryExtraction(engine, conv, trigger, unextractedMessages)
+        }
+    }
+
+    private fun scheduleMemoryExtraction(
+        engine: MemoryEngine,
+        conv: Conversation,
+        trigger: MemoryExtractionTrigger
+    ) {
+        if (!conv.generateMemory) return
+        if (memoryExtractionJob?.isActive == true) {
+            AppLogger.i("ChatVM", "Memory extraction already running, skip trigger=$trigger")
+            return
+        }
+        memoryExtractionJob = app.launchBackground {
+            val unextractedMessages = getUnextractedMessages(conv.id)
+            val effectiveTrigger = if (trigger == MemoryExtractionTrigger.CONVERSATION_EXIT) {
+                extractionPolicy.onConversationExit(unextractedMessages) ?: run {
+                    AppLogger.i("ChatVM", "Memory extraction exit flush skipped: no unextracted user messages")
+                    return@launchBackground
+                }
+            } else {
+                trigger
+            }
+            runBackgroundMemoryExtraction(engine, conv, effectiveTrigger, unextractedMessages)
+        }
+    }
+
+    private suspend fun getUnextractedMessages(conversationId: String): List<ChatMessage> {
+        val watermark = app.settingsDataStore.getMemoryExtractionWatermark(conversationId)
+        return app.conversationRepo.getMessagesAfter(conversationId, watermark)
+    }
+
+    private suspend fun runBackgroundMemoryExtraction(
+        engine: MemoryEngine,
+        conv: Conversation,
+        trigger: MemoryExtractionTrigger,
+        messages: List<ChatMessage>
+    ) {
+        if (messages.isEmpty()) return
+        AppLogger.i("ChatVM", "Background memory extraction start: trigger=$trigger, messages=${messages.size}")
+        val result = extractMemoriesForMessages(engine, conv, messages)
+        if (result == null) {
+            AppLogger.e("ChatVM", "Background memory extraction failed; watermark not advanced")
+            return
+        }
+        saveExtractionWatermark(conv.id, messages)
+        AppLogger.i("ChatVM", "Background memory extraction done: trigger=$trigger, new=${result.newMemories.size}, updates=${result.updates.size}")
+    }
+
+    private suspend fun saveExtractionWatermark(conversationId: String, messages: List<ChatMessage>) {
+        val watermark = messages.maxOfOrNull { it.createdAt } ?: return
+        app.settingsDataStore.saveMemoryExtractionWatermark(conversationId, watermark)
+    }
+
     private suspend fun extractMemoriesForMessages(
         engine: MemoryEngine,
         conv: Conversation,
         messages: List<ChatMessage>
-    ): MemoryExtractionResult {
+    ): MemoryExtractionResult? {
         return try {
             MemoryExtractionSaver(engine, memoryExtractionStore()).extractAndSave(conv, messages)
         } catch (e: Exception) {
             AppLogger.e("ChatVM", "Memory extraction failed without blocking chat: ${e.message}")
-            MemoryExtractionResult()
+            null
         }
     }
 

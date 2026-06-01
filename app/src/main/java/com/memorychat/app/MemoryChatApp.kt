@@ -8,8 +8,10 @@ import com.memorychat.app.domain.model.Persona
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 
 class MemoryChatApp : Application() {
     lateinit var database: AppDatabase
@@ -40,5 +42,9 @@ class MemoryChatApp : Application() {
             defaultPersonaReady.await()
         }
         return personaRepo.getOrCreateDefaultPersona()
+    }
+
+    fun launchBackground(block: suspend CoroutineScope.() -> Unit): Job {
+        return applicationScope.launch(block = block)
     }
 }

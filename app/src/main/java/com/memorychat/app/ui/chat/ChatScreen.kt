@@ -46,6 +46,12 @@ fun ChatScreen(
         viewModel.loadConversation(conversationId)
     }
 
+    DisposableEffect(conversationId) {
+        onDispose {
+            viewModel.flushPendingMemoryExtraction()
+        }
+    }
+
     LaunchedEffect(messages.size, streamingContent) {
         val total = messages.size + if (streamingContent.isNotEmpty()) 1 else 0
         if (total > 0) listState.animateScrollToItem(total - 1)

@@ -18,6 +18,7 @@ import com.memorychat.app.domain.model.MemoryType
 import com.memorychat.app.domain.provider.OpenAICompatibleProvider
 import com.memorychat.app.domain.engine.MemoryExtractionSaver
 import com.memorychat.app.domain.engine.MemoryExtractionStore
+import com.memorychat.app.domain.engine.MemoryExtractionTriggerPolicy
 import com.memorychat.app.domain.engine.MemoryEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -154,6 +155,32 @@ class AdbInputReceiver : BroadcastReceiver() {
                     )
                     db.messageDao().insert(assistantMsg)
                     if (conversation?.generateMemory == true) {
+                        val latestUserMessage = ChatMessage(
+                            id = userMsg.id,
+                            conversationId = conversationId,
+                            role = "user",
+                            content = userMsg.content,
+                            createdAt = userMsg.createdAt
+                        )
+                        val watermark = ds.getMemoryExtractionWatermark(conversationId)
+                        val unextractedMessages = db.messageDao()
+                            .getByConversationIdAfter(conversationId, watermark)
+                            .map { entity ->
+                                ChatMessage(
+                                    id = entity.id,
+                                    conversationId = entity.conversationId,
+                                    role = entity.role,
+                                    content = entity.content,
+                                    createdAt = entity.createdAt
+                                )
+                            }
+                        val trigger = MemoryExtractionTriggerPolicy()
+                            .afterAssistantTurn(unextractedMessages, latestUserMessage)
+                        if (trigger == null) {
+                            Log.i("AdbInput", "Extraction deferred: unextracted=${unextractedMessages.size}")
+                            Log.i("AdbInput", "=== DONE (recall=$recalledCount) ===")
+                            return@launch
+                        }
                         val extractionStore = object : MemoryExtractionStore {
                             override suspend fun getActiveMemories(): List<Memory> = memoryRepo.getActiveMemories()
                             override suspend fun isTombstoned(content: String, type: MemoryType): Boolean =
@@ -165,24 +192,12 @@ class AdbInputReceiver : BroadcastReceiver() {
                         val extraction = MemoryExtractionSaver(MemoryEngine(provider, model), extractionStore)
                             .extractAndSave(
                                 conversation,
-                                listOf(
-                                    ChatMessage(
-                                        id = userMsg.id,
-                                        conversationId = conversationId,
-                                        role = "user",
-                                        content = userMsg.content,
-                                        createdAt = userMsg.createdAt
-                                    ),
-                                    ChatMessage(
-                                        id = assistantMsg.id,
-                                        conversationId = conversationId,
-                                        role = "assistant",
-                                        content = assistantMsg.content,
-                                        createdAt = assistantMsg.createdAt
-                                    )
-                                )
+                                unextractedMessages
                             )
-                        Log.i("AdbInput", "Extraction: new=${extraction.newMemories.size}, updates=${extraction.updates.size}")
+                        unextractedMessages.maxOfOrNull { it.createdAt }?.let { extractedAt ->
+                            ds.saveMemoryExtractionWatermark(conversationId, extractedAt)
+                        }
+                        Log.i("AdbInput", "Extraction: trigger=$trigger, new=${extraction.newMemories.size}, updates=${extraction.updates.size}")
                     } else {
                         Log.i("AdbInput", "Extraction skipped: generateMemory=false")
                     }

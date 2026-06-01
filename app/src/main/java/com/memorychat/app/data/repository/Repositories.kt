@@ -25,6 +25,8 @@ class ConversationRepository(
     }
 
     suspend fun getMessages(convId: String) = messageDao.getByConversationId(convId).map { it.toDomain() }
+    suspend fun getMessagesAfter(convId: String, createdAfter: Long) =
+        messageDao.getByConversationIdAfter(convId, createdAfter).map { it.toDomain() }
     suspend fun saveMessage(msg: ChatMessage) = messageDao.insert(msg.toEntity())
     suspend fun deleteMessage(id: String) = messageDao.delete(id)
     suspend fun getMessageCount(convId: String) = messageDao.countByConversationId(convId)
