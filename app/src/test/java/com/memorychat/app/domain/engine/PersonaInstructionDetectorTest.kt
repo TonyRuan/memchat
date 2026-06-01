@@ -15,6 +15,20 @@ class PersonaInstructionDetectorTest {
     }
 
     @Test
+    fun detectsPersonaRenameInstructionFromUserFraming() {
+        val instruction = PersonaInstructionDetector.detect("我还是给你取名叫芒果吧。")
+
+        assertEquals("芒果", instruction?.name)
+    }
+
+    @Test
+    fun detectsPersonaRenameInstructionWithChangeNameWording() {
+        val instruction = PersonaInstructionDetector.detect("把你改名为小芒果")
+
+        assertEquals("小芒果", instruction?.name)
+    }
+
+    @Test
     fun detectsPersonaToneInstruction() {
         val instruction = PersonaInstructionDetector.detect("你的语气要冷静、直接一点")
 

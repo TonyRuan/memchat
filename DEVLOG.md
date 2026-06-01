@@ -1,5 +1,24 @@
 # MemoryChat Development Log
 
+## v1.0.49 (2026-06-01)
+
+### Changes
+- Added a model-backed Persona instruction extractor so assistant name, role, tone, and rule changes are not limited to fixed regex patterns
+- Kept deterministic Persona detection as a fast path, then gated model fallback to messages that look like assistant-persona settings
+- Added support for rename wording such as `给你取名叫芒果` and `把你改名为小芒果`, including trailing particle cleanup
+- Wired the hybrid Persona extractor into both chat UI and ADB test message paths
+- Updated the emulator smoke script default APK path to v1.0.49
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.PersonaInstructionDetectorTest" --tests "com.memorychat.app.domain.engine.PersonaInstructionExtractorTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.49-debug.apk`
+
+---
+
 ## v1.0.48 (2026-06-01)
 
 ### Changes

@@ -13,6 +13,7 @@ import com.memorychat.app.domain.engine.MemoryExtractionStore
 import com.memorychat.app.domain.engine.MemoryExtractionTrigger
 import com.memorychat.app.domain.engine.MemoryExtractionTriggerPolicy
 import com.memorychat.app.domain.engine.MemoryEngine
+import com.memorychat.app.domain.engine.PersonaInstructionExtractor
 import com.memorychat.app.domain.engine.PersonaInstructionDetector
 import com.memorychat.app.util.AppLogger
 import kotlinx.coroutines.CancellationException
@@ -91,7 +92,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 // 加载当前会话绑定的 Persona
                 val (activeConv, loadedPersona) = ensureConversationPersona(conv)
-                val persona = applyPersonaInstructionIfNeeded(loadedPersona, content)
+                val model = app.settingsDataStore.modelName.first()
+                val persona = applyPersonaInstructionIfNeeded(loadedPersona, content, provider, model)
                 AppLogger.i("ChatVM", "Persona loaded: ${persona?.name ?: "none"}")
 
                 val userMsg = ChatMessage(conversationId = activeConv.id, role = "user", content = content)
@@ -112,7 +114,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     allMessages.add(0, ChatMessage(role = "system", content = systemPrompt))
                 }
 
-                val model = app.settingsDataStore.modelName.first()
                 AppLogger.i("ChatVM", "Starting stream, model=$model")
 
                 streamJob = viewModelScope.launch {
@@ -207,9 +208,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun applyPersonaInstructionIfNeeded(
         persona: Persona,
-        content: String
+        content: String,
+        provider: OpenAICompatibleProvider,
+        model: String
     ): Persona {
-        val instruction = PersonaInstructionDetector.detect(content) ?: return persona
+        val instruction = PersonaInstructionExtractor(provider, model).detect(content) ?: return persona
         val updated = PersonaInstructionDetector.apply(persona, instruction)
         app.personaRepo.savePersona(updated)
         AppLogger.i("ChatVM", "Persona updated from user instruction: ${updated.id}")

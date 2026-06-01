@@ -17,7 +17,9 @@ data class PersonaInstruction(
 object PersonaInstructionDetector {
     private val namePatterns = listOf(
         Regex("(?:以后)?你(?:的名字)?叫[:：\\s]*([^，。,.!！?？\\n]+)"),
-        Regex("你的名字(?:是|叫)[:：\\s]*([^，。,.!！?？\\n]+)")
+        Regex("你的名字(?:是|叫)[:：\\s]*([^，。,.!！?？\\n]+)"),
+        Regex("(?:给你|帮你|为你)?(?:取名|起名)(?:叫|为|是)?[:：\\s]*([^，。,.!！?？\\n]+)"),
+        Regex("(?:把你|给你|帮你|为你)?(?:改名|更名)(?:叫|为|成|是)?[:：\\s]*([^，。,.!！?？\\n]+)")
     )
     private val tonePatterns = listOf(
         Regex("你的(?:语气|风格|说话方式)(?:要|是|改成|设为)?[:：\\s]*([^，。,.!！?？\\n]+(?:[、,，][^，。,.!！?？\\n]+)*)"),
@@ -82,6 +84,10 @@ object PersonaInstructionDetector {
         return trim()
             .trim('。', '.', '，', ',', '：', ':', '"', '\'', '“', '”')
             .removePrefix("要")
+            .removeSuffix("吧")
+            .removeSuffix("啦")
+            .removeSuffix("哦")
+            .removeSuffix("呀")
             .trim()
     }
 
