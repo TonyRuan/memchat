@@ -1,5 +1,23 @@
 # MemoryChat Development Log
 
+## v1.0.48 (2026-06-01)
+
+### Changes
+- Added type-scoped memory deduplication for semantically equivalent device-style facts such as `通信机型号是 COM-1047` vs `通信机是 COM-1047`
+- Added deterministic merge behavior so a more specific extracted memory updates the existing memory instead of inserting a duplicate
+- Updated the memory extraction prompt to include existing memory ids and explicit update guidance so model-generated updates can target real memories
+- Updated the emulator smoke script default APK path to v1.0.48
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest" --tests "com.memorychat.app.domain.engine.MemoryEngineTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.48-debug.apk`
+
+---
+
 ## v1.0.47 (2026-06-01)
 
 ### Changes

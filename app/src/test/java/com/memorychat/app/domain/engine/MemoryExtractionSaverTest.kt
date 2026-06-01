@@ -264,6 +264,73 @@ class MemoryExtractionSaverTest {
     }
 
     @Test
+    fun skipsEquivalentDeviceMemoryWithDifferentWording() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "new_memories": [
+                    { "type": "project", "content": "通信机是 COM-1047" }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val store = FakeMemoryStore(
+            activeMemories = listOf(
+                Memory(
+                    id = "existing",
+                    type = MemoryType.PROJECT,
+                    content = "通信机型号是 COM-1047"
+                )
+            )
+        )
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "记住通信机"))
+        )
+
+        assertTrue(store.inserted.isEmpty())
+        assertTrue(store.updated.isEmpty())
+    }
+
+    @Test
+    fun mergesMoreSpecificDeviceMemoryIntoExistingMemory() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "new_memories": [
+                    { "type": "project", "content": "通信机型号是 COM-1047，部署在实验台 A" }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val store = FakeMemoryStore(
+            activeMemories = listOf(
+                Memory(
+                    id = "existing",
+                    type = MemoryType.PROJECT,
+                    content = "通信机型号是 COM-1047"
+                )
+            )
+        )
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "记住通信机位置"))
+        )
+
+        assertTrue(store.inserted.isEmpty())
+        assertEquals("existing", store.updated.single().id)
+        assertEquals("通信机型号是 COM-1047，部署在实验台 A", store.updated.single().content)
+    }
+
+    @Test
     fun skipsPersonaInstructionMisclassifiedAsPreferenceByModel() = runTest {
         val provider = FakeLlmProvider(
             completeResponses = listOf(

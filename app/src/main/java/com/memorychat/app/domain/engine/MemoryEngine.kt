@@ -76,7 +76,11 @@ RULES:
         existingMemories: List<Memory>
     ): MemoryExtractionResult {
         val conversationText = messages.joinToString("\n") { "${it.role}: ${it.content}" }
-        val existingText = existingMemories.joinToString("\n") { "- [${it.type}] ${it.content}" }
+        val existingText = existingMemories
+            .joinToString("\n") {
+                "- id=${it.id} type=${it.type.name} user_edited=${it.userEdited} content=${it.content}"
+            }
+            .ifBlank { "(none)" }
 
         val prompt = """$EXTRACTION_PROMPT
 
@@ -85,6 +89,11 @@ $existingText
 
 Current conversation:
 $conversationText
+
+Deduplication and update rules:
+- Do not output a new memory if the same fact already exists.
+- Use updates when new information refines or expands an existing memory, and set target_memory_id to an id from Existing memories.
+- If new information conflicts with a user-edited memory, discard it instead of updating.
 
 Output JSON format:
 {

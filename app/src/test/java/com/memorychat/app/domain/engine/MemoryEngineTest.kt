@@ -4,8 +4,10 @@ import com.memorychat.app.domain.model.Memory
 import com.memorychat.app.domain.model.MemoryStatus
 import com.memorychat.app.domain.model.MemoryType
 import com.memorychat.app.domain.model.Persona
+import com.memorychat.app.testutil.FakeLlmProvider
 import com.memorychat.app.domain.provider.LlmProvider
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -109,6 +111,28 @@ class MemoryEngineTest {
         assertTrue(prompt.contains("[User Profile]"))
         assertTrue(prompt.contains("[Project Memory]"))
         assertTrue(prompt.contains("[Recent Summaries]"))
+    }
+
+    @Test
+    fun extractionPromptIncludesExistingMemoryIdsForModelUpdates() = runTest {
+        val provider = FakeLlmProvider(completeResponses = listOf("""{"new_memories":[]}"""))
+        val engine = MemoryEngine(provider, "fake-model")
+
+        engine.extractMemories(
+            messages = listOf(
+                com.memorychat.app.domain.model.ChatMessage(
+                    role = "user",
+                    content = "通信机部署在实验台 A"
+                )
+            ),
+            existingMemories = listOf(
+                memory("memory-1047", MemoryType.PROJECT, "通信机型号是 COM-1047")
+            )
+        )
+
+        val prompt = provider.completeRequests.single().messages.single().content
+        assertTrue(prompt.contains("- id=memory-1047 type=PROJECT user_edited=false content=通信机型号是 COM-1047"))
+        assertTrue(prompt.contains("Use updates when new information refines or expands an existing memory"))
     }
 
     private fun memory(id: String, type: MemoryType, content: String): Memory {

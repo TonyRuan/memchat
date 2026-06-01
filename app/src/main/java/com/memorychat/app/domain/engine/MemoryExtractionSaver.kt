@@ -44,7 +44,8 @@ class MemoryExtractionSaver(
         AppLogger.i("MemoryExtraction", "Extracted: new=${result.newMemories.size}, updates=${result.updates.size}")
 
         val fallbackSourceIds = messages.map { it.id }
-        val seenNewContents = existing.map { memoryFingerprint(it.content) }.toMutableSet()
+        val activeMemories = existing.toMutableList()
+        val seenNewContents = existing.map { memoryKey(it.type, it.content) }.toMutableSet()
         result.newMemories.forEach { candidate ->
             val content = candidate.content.trim()
             if (content.isBlank()) return@forEach
@@ -56,22 +57,43 @@ class MemoryExtractionSaver(
                 AppLogger.d("MemoryExtraction", "Skipping tombstoned: ${content.take(40)}")
                 return@forEach
             }
-            if (!seenNewContents.add(memoryFingerprint(content))) {
+            if (!seenNewContents.add(memoryKey(candidate.type, content))) {
                 AppLogger.d("MemoryExtraction", "Skipping duplicate: ${content.take(40)}")
                 return@forEach
             }
-
-            store.insert(
-                Memory(
-                    type = candidate.type,
-                    content = content,
-                    status = candidate.statusSuggestion,
-                    importance = candidate.importance,
-                    confidence = candidate.confidence,
-                    sourceMessageIds = candidate.sourceMessageIds.ifEmpty { fallbackSourceIds },
-                    sourceConversationId = conversation.id
+            val merge = findSimilarMemory(candidate.type, content, activeMemories)
+            if (merge != null) {
+                if (merge.memory.userEdited) {
+                    AppLogger.d("MemoryExtraction", "Skipping user-edited merge: ${merge.memory.id}")
+                    return@forEach
+                }
+                if (merge.newContent == null) {
+                    AppLogger.d("MemoryExtraction", "Skipping equivalent memory: ${content.take(40)}")
+                    return@forEach
+                }
+                val updated = merge.memory.copy(
+                    content = merge.newContent,
+                    updatedAt = System.currentTimeMillis()
                 )
+                store.update(updated)
+                activeMemories.removeAll { it.id == updated.id }
+                activeMemories += updated
+                seenNewContents += memoryKey(updated.type, updated.content)
+                AppLogger.d("MemoryExtraction", "Merged similar memory: ${updated.id}")
+                return@forEach
+            }
+
+            val memory = Memory(
+                type = candidate.type,
+                content = content,
+                status = candidate.statusSuggestion,
+                importance = candidate.importance,
+                confidence = candidate.confidence,
+                sourceMessageIds = candidate.sourceMessageIds.ifEmpty { fallbackSourceIds },
+                sourceConversationId = conversation.id
             )
+            store.insert(memory)
+            activeMemories += memory
         }
 
         result.updates.forEach { update ->
@@ -151,6 +173,65 @@ class MemoryExtractionSaver(
             .replace(Regex("\\s+"), " ")
             .trim()
     }
+
+    private fun memoryKey(type: MemoryType, content: String): String {
+        return "${type.name}:${memoryFingerprint(content)}"
+    }
+
+    private fun findSimilarMemory(
+        type: MemoryType,
+        content: String,
+        existing: List<Memory>
+    ): MemoryMerge? {
+        val candidateCanonical = semanticFingerprint(content)
+        if (candidateCanonical.isBlank()) return null
+        return existing
+            .asSequence()
+            .filter { it.type == type }
+            .mapNotNull { memory ->
+                val existingCanonical = semanticFingerprint(memory.content)
+                when {
+                    existingCanonical.isBlank() -> null
+                    existingCanonical == candidateCanonical -> MemoryMerge(memory, null)
+                    isSafeExpansion(existingCanonical, candidateCanonical) ->
+                        if (candidateCanonical.length > existingCanonical.length) {
+                            MemoryMerge(memory, content)
+                        } else {
+                            MemoryMerge(memory, null)
+                        }
+                    else -> null
+                }
+            }
+            .firstOrNull()
+    }
+
+    private fun isSafeExpansion(existingCanonical: String, candidateCanonical: String): Boolean {
+        val shorter = minOf(existingCanonical.length, candidateCanonical.length)
+        if (shorter < 6) return false
+        return existingCanonical.contains(candidateCanonical) || candidateCanonical.contains(existingCanonical)
+    }
+
+    private fun semanticFingerprint(content: String): String {
+        return content
+            .lowercase()
+            .replace(Regex("[\\p{Punct}，。！？；：“”‘’、（）【】《》]"), "")
+            .replace(Regex("\\s+"), "")
+            .replace("型号是", "")
+            .replace("型号为", "")
+            .replace("型号", "")
+            .replace("编号是", "")
+            .replace("编号为", "")
+            .replace("编号", "")
+            .replace("是", "")
+            .replace("为", "")
+            .replace("的", "")
+            .trim()
+    }
+
+    private data class MemoryMerge(
+        val memory: Memory,
+        val newContent: String?
+    )
 }
 
 interface ConversationMessageStore {
