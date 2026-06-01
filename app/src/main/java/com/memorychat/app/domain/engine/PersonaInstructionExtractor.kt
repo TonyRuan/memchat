@@ -34,6 +34,8 @@ class PersonaInstructionExtractor(
     private fun shouldUseModelFallback(content: String, currentPersona: Persona?): Boolean {
         val text = content.trim().lowercase()
         if (text.isBlank()) return false
+        if (PersonaInstructionDetector.isUserAddressingRequest(content)) return false
+
         val userProfileName = listOf("我叫", "我的名字", "我的昵称", "my name is", "call me")
             .any { text.contains(it) }
         if (userProfileName) return false

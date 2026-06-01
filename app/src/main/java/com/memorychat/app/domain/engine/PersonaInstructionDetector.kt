@@ -35,6 +35,8 @@ object PersonaInstructionDetector {
 
     fun detect(content: String): PersonaInstruction? {
         val text = content.trim()
+        if (isUserAddressingRequest(text)) return null
+
         val name = firstCapture(text, namePatterns)?.clean()
         val tone = firstCapture(text, tonePatterns)?.clean()
         val role = firstCapture(text, rolePatterns)
@@ -67,11 +69,29 @@ object PersonaInstructionDetector {
 
     fun looksLikePersonaMemory(content: String): Boolean {
         val text = content.trim()
+        if (isUserAddressingRequest(text)) return false
         if (detect(text) != null) return true
         val lower = text.lowercase()
         val subjectLooksLikeAssistant = listOf("ai", "assistant", "agent", "助手", "你", "你的").any { lower.contains(it) }
         val hasPersonaField = listOf("名字", "名称", "叫", "角色", "身份", "性格", "语气", "风格", "role", "tone", "persona").any { lower.contains(it) }
         return subjectLooksLikeAssistant && hasPersonaField
+    }
+
+    fun isUserAddressingRequest(content: String): Boolean {
+        val compact = content.trim().filterNot { it.isWhitespace() }
+        if (compact.isBlank()) return false
+
+        val marker = listOf("称呼我为", "称呼我叫", "称呼我", "管我叫", "叫我做", "叫我", "喊我")
+            .firstOrNull { compact.contains(it) }
+            ?: return compact.lowercase().contains("callme")
+        val candidate = compact.substringAfter(marker)
+            .clean()
+            .trimStart('为', '叫', '做')
+            .clean()
+        if (candidate.isBlank() || candidate.length > 16) return false
+
+        val actionPrefixes = listOf("不要", "别", "去", "来", "帮", "把", "给", "记得", "需要", "可以")
+        return actionPrefixes.none { candidate.startsWith(it) }
     }
 
     private fun firstCapture(text: String, patterns: List<Regex>): String? {

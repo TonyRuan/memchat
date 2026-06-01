@@ -1,5 +1,25 @@
 # MemoryChat Development Log
 
+## v1.0.51 (2026-06-01)
+
+### Changes
+- Fixed Persona instruction detection so user-addressing requests such as `你叫我大王吧` are not interpreted as assistant renames
+- Shared the user-addressing exclusion with the model-backed Persona extractor to prevent fallback extraction from renaming Persona
+- Excluded the same user-addressing phrasing from Persona-like memory detection
+- Updated the emulator smoke script default APK path to v1.0.51
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.PersonaInstructionDetectorTest" --tests "com.memorychat.app.domain.engine.PersonaInstructionExtractorTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+- Android emulator QA on `emulator-5554`: installed v1.0.51, launched `com.memorychat.app/.MainActivity`, captured UI tree/screenshot, crash log empty
+- ADB Persona regression smoke: sent `你叫我大王吧` to the existing conversation; `persona_default` stayed `猪妞`, and no `Persona updated` log was emitted
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.51-debug.apk`
+
+---
+
 ## v1.0.50 (2026-06-01)
 
 ### Changes

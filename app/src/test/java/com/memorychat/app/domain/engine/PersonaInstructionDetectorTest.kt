@@ -43,6 +43,14 @@ class PersonaInstructionDetectorTest {
     }
 
     @Test
+    fun doesNotTreatUserAddressingRequestAsPersonaName() {
+        val instruction = PersonaInstructionDetector.detect("你叫我大王吧")
+
+        assertNull(instruction)
+        assertNull(PersonaInstructionDetector.detect("以后请称呼我为大王"))
+    }
+
+    @Test
     fun appliesInstructionToPersonaWithoutDroppingExistingRules() {
         val persona = Persona(
             id = "p1",
@@ -66,5 +74,6 @@ class PersonaInstructionDetectorTest {
     fun identifiesPersonaLikeMemoryContent() {
         assertTrue(PersonaInstructionDetector.looksLikePersonaMemory("用户希望 AI 名字叫小墨"))
         assertTrue(PersonaInstructionDetector.looksLikePersonaMemory("助手的语气要冷静直接"))
+        assertTrue(!PersonaInstructionDetector.looksLikePersonaMemory("请你以后喊我大王"))
     }
 }

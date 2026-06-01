@@ -4,6 +4,7 @@ import com.memorychat.app.testutil.FakeLlmProvider
 import com.memorychat.app.domain.model.Persona
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -84,6 +85,22 @@ class PersonaInstructionExtractorTest {
         val instruction = extractor.detect("我叫张三")
 
         assertEquals(null, instruction)
+        assertTrue(provider.completeRequests.isEmpty())
+    }
+
+    @Test
+    fun doesNotCallModelForUserAddressingRequest() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf("""{"is_persona_instruction":true,"name":"我大王"}""")
+        )
+        val extractor = PersonaInstructionExtractor(provider, "fake-model")
+
+        val instruction = extractor.detect(
+            content = "你叫我大王吧",
+            currentPersona = Persona(name = "猪妞")
+        )
+
+        assertNull(instruction)
         assertTrue(provider.completeRequests.isEmpty())
     }
 }
