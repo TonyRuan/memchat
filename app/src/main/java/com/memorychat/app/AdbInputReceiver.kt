@@ -22,6 +22,7 @@ import com.memorychat.app.domain.engine.MemoryExtractionTriggerPolicy
 import com.memorychat.app.domain.engine.MemoryEngine
 import com.memorychat.app.domain.engine.PersonaInstructionExtractor
 import com.memorychat.app.domain.engine.PersonaInstructionDetector
+import com.memorychat.app.domain.engine.PersonaUpdateAcknowledger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -89,11 +90,13 @@ class AdbInputReceiver : BroadcastReceiver() {
                         )
                     }
                     var persona = conversation?.personaId?.let { personaRepo.getPersona(it) }
+                    var personaAcknowledgement: String? = null
                     persona?.let { currentPersona ->
                         PersonaInstructionExtractor(provider, model).detect(message, currentPersona)?.let { instruction ->
                             val updatedPersona = PersonaInstructionDetector.apply(currentPersona, instruction)
                             personaRepo.savePersona(updatedPersona)
                             persona = updatedPersona
+                            personaAcknowledgement = PersonaUpdateAcknowledger.acknowledge(instruction)
                             Log.i("AdbInput", "Persona updated from message: ${updatedPersona.id}")
                         }
                     }
@@ -101,6 +104,20 @@ class AdbInputReceiver : BroadcastReceiver() {
                         Log.w("AdbInput", "Conversation not found for conv_id=$conversationId")
                     } else {
                         Log.i("AdbInput", "Conversation persona=${conversation?.personaId ?: "none"}, useMemory=${conversation?.useMemory}, generateMemory=${conversation?.generateMemory}")
+                    }
+
+                    if (personaAcknowledgement != null) {
+                        val assistantMsg = MessageEntity(
+                            id = java.util.UUID.randomUUID().toString(),
+                            conversationId = conversationId,
+                            role = "assistant",
+                            content = personaAcknowledgement,
+                            createdAt = System.currentTimeMillis()
+                        )
+                        db.messageDao().insert(assistantMsg)
+                        Log.i("AdbInput", "[4/4] Persona acknowledgement: ${personaAcknowledgement?.take(80)}")
+                        Log.i("AdbInput", "=== DONE (persona_update=true) ===")
+                        return@launch
                     }
 
                     // === MEMORY RECALL ===

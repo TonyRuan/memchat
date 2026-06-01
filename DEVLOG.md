@@ -1,5 +1,26 @@
 # MemoryChat Development Log
 
+## v1.0.54 (2026-06-01)
+
+### Changes
+- Added a deterministic Persona update acknowledgement after LLM classification succeeds, so applied renames are confirmed instead of being re-decided by the chat model
+- Updated Chat UI flow to save the user message, apply Persona changes, save the acknowledgement, and skip the normal chat completion for Persona update turns
+- Updated the ADB test message path with the same acknowledgement behavior
+- Added regression coverage for acknowledgement text to prevent refusal wording after successful Persona updates
+- Updated the emulator smoke script default APK path to v1.0.54
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.PersonaUpdateAcknowledgerTest" --tests "com.memorychat.app.domain.engine.PersonaInstructionExtractorTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+- Android emulator QA on `emulator-5554`: installed v1.0.54 and launched `com.memorychat.app/.MainActivity`
+- ADB real-model Persona acknowledgement smoke: sent `改为露露`; `persona_default` changed from `噜噜` to `露露`, the saved assistant message was `好的，已经改名为「露露」。`, and the normal chat API response path was skipped
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.54-debug.apk`
+
+---
+
 ## v1.0.53 (2026-06-01)
 
 ### Changes

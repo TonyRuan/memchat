@@ -15,6 +15,7 @@ import com.memorychat.app.domain.engine.MemoryExtractionTriggerPolicy
 import com.memorychat.app.domain.engine.MemoryEngine
 import com.memorychat.app.domain.engine.PersonaInstructionExtractor
 import com.memorychat.app.domain.engine.PersonaInstructionDetector
+import com.memorychat.app.domain.engine.PersonaUpdateAcknowledger
 import com.memorychat.app.util.AppLogger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -93,12 +94,28 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 // 加载当前会话绑定的 Persona
                 val (activeConv, loadedPersona) = ensureConversationPersona(conv)
                 val model = app.settingsDataStore.modelName.first()
-                val persona = applyPersonaInstructionIfNeeded(loadedPersona, content, provider, model)
+                val personaUpdate = applyPersonaInstructionIfNeeded(loadedPersona, content, provider, model)
+                val persona = personaUpdate.persona
                 AppLogger.i("ChatVM", "Persona loaded: ${persona?.name ?: "none"}")
 
                 val userMsg = ChatMessage(conversationId = activeConv.id, role = "user", content = content)
                 app.conversationRepo.saveMessage(userMsg)
                 _messages.value = _messages.value + userMsg
+
+                if (personaUpdate.acknowledgement != null) {
+                    val assistantMsg = ChatMessage(
+                        conversationId = activeConv.id,
+                        role = "assistant",
+                        content = personaUpdate.acknowledgement
+                    )
+                    app.conversationRepo.saveMessage(assistantMsg)
+                    _messages.value = _messages.value + assistantMsg
+                    memoryEngine?.let { engine ->
+                        scheduleMemoryExtractionAfterTurn(engine, activeConv, userMsg)
+                    }
+                    finishGeneration()
+                    return@launch
+                }
 
                 val memories = if (activeConv.useMemory) {
                     val activeMemories = app.memoryRepo.getActiveMemories()
@@ -211,13 +228,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         content: String,
         provider: OpenAICompatibleProvider,
         model: String
-    ): Persona {
-        val instruction = PersonaInstructionExtractor(provider, model).detect(content, persona) ?: return persona
+    ): PersonaUpdateResult {
+        val instruction = PersonaInstructionExtractor(provider, model).detect(content, persona)
+            ?: return PersonaUpdateResult(persona = persona)
         val updated = PersonaInstructionDetector.apply(persona, instruction)
         app.personaRepo.savePersona(updated)
         AppLogger.i("ChatVM", "Persona updated from user instruction: ${updated.id}")
-        return updated
+        return PersonaUpdateResult(
+            persona = updated,
+            acknowledgement = PersonaUpdateAcknowledger.acknowledge(instruction)
+        )
     }
+
+    private data class PersonaUpdateResult(
+        val persona: Persona,
+        val acknowledgement: String? = null
+    )
 
     private suspend fun ensureConversationPersona(conv: Conversation): Pair<Conversation, Persona> {
         conv.personaId?.let { personaId ->
