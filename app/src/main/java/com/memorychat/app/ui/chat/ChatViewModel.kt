@@ -13,6 +13,7 @@ import com.memorychat.app.domain.engine.MemoryExtractionStore
 import com.memorychat.app.domain.engine.MemoryExtractionTrigger
 import com.memorychat.app.domain.engine.MemoryExtractionTriggerPolicy
 import com.memorychat.app.domain.engine.MemoryEngine
+import com.memorychat.app.domain.engine.PersonaInstructionDetector
 import com.memorychat.app.util.AppLogger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -88,14 +89,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 // 加载当前会话绑定的 Persona
-                val persona = conv.personaId?.let { app.personaRepo.getPersona(it) }
+                val (activeConv, loadedPersona) = ensureConversationPersona(conv)
+                val persona = applyPersonaInstructionIfNeeded(loadedPersona, content)
                 AppLogger.i("ChatVM", "Persona loaded: ${persona?.name ?: "none"}")
 
-                val userMsg = ChatMessage(conversationId = conv.id, role = "user", content = content)
+                val userMsg = ChatMessage(conversationId = activeConv.id, role = "user", content = content)
                 app.conversationRepo.saveMessage(userMsg)
                 _messages.value = _messages.value + userMsg
 
-                val memories = if (conv.useMemory) {
+                val memories = if (activeConv.useMemory) {
                     val activeMemories = app.memoryRepo.getActiveMemories()
                     val recall = memoryEngine?.recall(content, activeMemories, persona)
                     _lastRecallResult.value = recall
@@ -122,12 +124,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                 accumulated = ""
                                 _streamingContent.value = ""
                                 if (finalContent.isNotBlank()) {
-                                    val assistantMsg = ChatMessage(conversationId = conv.id, role = "assistant", content = finalContent)
+                                    val assistantMsg = ChatMessage(conversationId = activeConv.id, role = "assistant", content = finalContent)
                                     app.conversationRepo.saveMessage(assistantMsg)
                                     _messages.value = _messages.value + assistantMsg
                                     AppLogger.d("ChatVM", "Message saved to DB and added to list")
                                     memoryEngine?.let { engine ->
-                                        scheduleMemoryExtractionAfterTurn(engine, conv, userMsg)
+                                        scheduleMemoryExtractionAfterTurn(engine, activeConv, userMsg)
                                     }
                                 }
                             } else {
@@ -144,12 +146,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         accumulated = ""
                         _streamingContent.value = ""
                         if (partialContent.isNotBlank()) {
-                            val assistantMsg = ChatMessage(conversationId = conv.id, role = "assistant", content = partialContent)
+                            val assistantMsg = ChatMessage(conversationId = activeConv.id, role = "assistant", content = partialContent)
                             app.conversationRepo.saveMessage(assistantMsg)
                             _messages.value = _messages.value + assistantMsg
                         } else {
                             val errorMsg = ChatTurnErrorPersister(conversationMessageStore())
-                                .persistAssistantError(conv.id, e.message)
+                                .persistAssistantError(activeConv.id, e.message)
                             _messages.value = _messages.value + errorMsg
                         }
                     } finally {
@@ -200,6 +202,31 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             projects = memories.filter { it.type == MemoryType.PROJECT },
             summaries = memories.filter { it.type == MemoryType.SUMMARY }
         )
+    }
+
+    private suspend fun applyPersonaInstructionIfNeeded(
+        persona: Persona,
+        content: String
+    ): Persona {
+        val instruction = PersonaInstructionDetector.detect(content) ?: return persona
+        val updated = PersonaInstructionDetector.apply(persona, instruction)
+        app.personaRepo.savePersona(updated)
+        AppLogger.i("ChatVM", "Persona updated from user instruction: ${updated.id}")
+        return updated
+    }
+
+    private suspend fun ensureConversationPersona(conv: Conversation): Pair<Conversation, Persona> {
+        conv.personaId?.let { personaId ->
+            app.personaRepo.getPersona(personaId)?.let { persona ->
+                return conv to persona
+            }
+        }
+
+        val defaultPersona = app.getOrCreateDefaultPersona()
+        val updatedConv = conv.copy(personaId = defaultPersona.id, updatedAt = System.currentTimeMillis())
+        app.conversationRepo.saveConversation(updatedConv)
+        _conversation.value = updatedConv
+        return updatedConv to defaultPersona
     }
 
     fun extractMemories() {

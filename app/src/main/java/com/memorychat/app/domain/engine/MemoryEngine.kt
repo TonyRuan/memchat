@@ -18,8 +18,9 @@ RULES:
 3. Extract facts user states about themselves (name, job, location, hobbies)
 4. Extract decisions and conclusions from the conversation
 5. Do NOT save: temporary emotions, jokes, sensitive info, API keys, passwords, tokens
-6. If user says "remember X", extract X as a memory with high confidence (0.9+)
-7. Output strict JSON only"""
+6. Do NOT save assistant persona settings as memories. If the user says the assistant's name, role, tone, personality, or behavior rules, that belongs to the Persona system, not long-term memory.
+7. If user says "remember X", extract X as a memory with high confidence (0.9+) only when X is not an assistant persona setting.
+8. Output strict JSON only"""
 
         fun buildRecallPrompt(
             persona: Persona?,

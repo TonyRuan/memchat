@@ -1,5 +1,25 @@
 # MemoryChat Development Log
 
+## v1.0.45 (2026-06-01)
+
+### Changes
+- Added deterministic persona instruction detection for assistant name, role, tone, and behavior-rule updates
+- Updated chat and ADB message paths so explicit persona settings update the current conversation persona instead of becoming long-term memories
+- Hardened memory extraction saving so model outputs that misclassify persona settings as `PREFERENCE` are filtered before writing `memories`
+- Updated the memory extraction prompt to state that assistant persona settings belong to the Persona system, not long-term memory
+- Added regression tests for persona instruction detection, persona-like memory filtering, and preserving real user answer preferences
+- Updated the emulator smoke script default APK path to v1.0.45
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.PersonaInstructionDetectorTest" --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.45-debug.apk`
+
+---
+
 ## v1.0.44 (2026-06-01)
 
 ### Changes

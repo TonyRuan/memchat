@@ -7,6 +7,7 @@
 | ID | 标题 | 状态 | 可信度 | 更新 | 摘要 |
 | --- | --- | --- | --- | --- | --- |
 | emulator-dialogue-validation-gap | 模拟器对话验证不能用首启 smoke 代替 | active | 95 | 2026-06-01 | 对 MemoryChat 的 PRD 修复交付，不能把 connectedDebugAndroidTest 首启通过表述为已经做过真实对话流程验证；真实聊天、模型回复、自动抽取、召回和记忆中心检查需要单独跑并记录证据。|
+| persona-memory-separation | 人格设定不能写入长期记忆 | active | 90 | 2026-06-01 | MemoryChat 的 persona 设置回答的是 AI 以什么身份、语气和规则互动；用户偏好回答的是用户希望怎样被回答。记忆提取不能把“你叫 X、你的语气是 X、你是 X”误存为 PREFERENCE。|
 
 ## 偏好
 

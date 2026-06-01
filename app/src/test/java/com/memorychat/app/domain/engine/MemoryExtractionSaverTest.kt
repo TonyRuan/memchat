@@ -263,6 +263,72 @@ class MemoryExtractionSaverTest {
         assertTrue(store.inserted.isEmpty())
     }
 
+    @Test
+    fun skipsPersonaInstructionMisclassifiedAsPreferenceByModel() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "new_memories": [
+                    { "type": "preference", "content": "用户希望 AI 名字叫小墨" }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val store = FakeMemoryStore()
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        val result = saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "以后你叫小墨"))
+        )
+
+        assertTrue(result.newMemories.isEmpty())
+        assertTrue(store.inserted.isEmpty())
+    }
+
+    @Test
+    fun explicitRememberDoesNotFallbackSavePersonaInstructionAsMemory() = runTest {
+        val provider = FakeLlmProvider(completeResponses = listOf("学会了"))
+        val store = FakeMemoryStore()
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        val result = saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "记住，你的名字叫小墨"))
+        )
+
+        assertTrue(result.newMemories.isEmpty())
+        assertTrue(store.inserted.isEmpty())
+    }
+
+    @Test
+    fun stillSavesUserAnswerPreferenceAsMemory() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "new_memories": [
+                    { "type": "preference", "content": "用户希望回答直接一点" }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val store = FakeMemoryStore()
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        val result = saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "以后回答我直接一点"))
+        )
+
+        assertEquals(1, result.newMemories.size)
+        assertEquals(1, store.inserted.size)
+        assertEquals(MemoryType.PREFERENCE, store.inserted.single().type)
+    }
+
     private class FakeMemoryStore(activeMemories: List<Memory> = emptyList()) : MemoryExtractionStore {
         val inserted = mutableListOf<Memory>()
         val updated = mutableListOf<Memory>()

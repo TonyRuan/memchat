@@ -20,6 +20,7 @@ import com.memorychat.app.domain.engine.MemoryExtractionSaver
 import com.memorychat.app.domain.engine.MemoryExtractionStore
 import com.memorychat.app.domain.engine.MemoryExtractionTriggerPolicy
 import com.memorychat.app.domain.engine.MemoryEngine
+import com.memorychat.app.domain.engine.PersonaInstructionDetector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -86,7 +87,15 @@ class AdbInputReceiver : BroadcastReceiver() {
                             updatedAt = it.updatedAt
                         )
                     }
-                    val persona = conversation?.personaId?.let { personaRepo.getPersona(it) }
+                    var persona = conversation?.personaId?.let { personaRepo.getPersona(it) }
+                    persona?.let { currentPersona ->
+                        PersonaInstructionDetector.detect(message)?.let { instruction ->
+                            val updatedPersona = PersonaInstructionDetector.apply(currentPersona, instruction)
+                            personaRepo.savePersona(updatedPersona)
+                            persona = updatedPersona
+                            Log.i("AdbInput", "Persona updated from message: ${updatedPersona.id}")
+                        }
+                    }
                     if (conversationEntity == null) {
                         Log.w("AdbInput", "Conversation not found for conv_id=$conversationId")
                     } else {
