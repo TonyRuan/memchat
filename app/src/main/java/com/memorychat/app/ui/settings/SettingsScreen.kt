@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.rememberScrollState
@@ -16,9 +17,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.memorychat.app.MemoryChatApp
+import com.memorychat.app.domain.model.ModelRuntimeDefaults
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -37,7 +40,12 @@ fun SettingsScreen(onBack: () -> Unit) {
     var modelName by remember { mutableStateOf("gpt-4o-mini") }
     var defaultUseMemory by remember { mutableStateOf(true) }
     var defaultGenerateMemory by remember { mutableStateOf(true) }
-    var maxTokens by remember { mutableStateOf("8192") }
+    var maxTokens by remember { mutableStateOf(ModelRuntimeDefaults.MIMO_V25_MAX_COMPLETION_TOKENS.toString()) }
+    var contextWindowTokens by remember { mutableStateOf(ModelRuntimeDefaults.MIMO_V25_CONTEXT_WINDOW_TOKENS.toString()) }
+    var safetyMarginTokens by remember { mutableStateOf(ModelRuntimeDefaults.DEFAULT_SAFETY_MARGIN_TOKENS.toString()) }
+    var compressionMessageTurnThreshold by remember { mutableStateOf(ModelRuntimeDefaults.DEFAULT_COMPRESSION_MESSAGE_TURN_THRESHOLD.toString()) }
+    var temperature by remember { mutableStateOf(ModelRuntimeDefaults.MIMO_V25_TEMPERATURE.toString()) }
+    var topP by remember { mutableStateOf(ModelRuntimeDefaults.MIMO_V25_TOP_P.toString()) }
 
     LaunchedEffect(Unit) {
         app.settingsDataStore.providerType.collect { providerType = it }
@@ -59,6 +67,21 @@ fun SettingsScreen(onBack: () -> Unit) {
     }
     LaunchedEffect(Unit) {
         app.settingsDataStore.maxTokens.collect { maxTokens = it.toString() }
+    }
+    LaunchedEffect(Unit) {
+        app.settingsDataStore.contextWindowTokens.collect { contextWindowTokens = it.toString() }
+    }
+    LaunchedEffect(Unit) {
+        app.settingsDataStore.safetyMarginTokens.collect { safetyMarginTokens = it.toString() }
+    }
+    LaunchedEffect(Unit) {
+        app.settingsDataStore.compressionMessageTurnThreshold.collect { compressionMessageTurnThreshold = it.toString() }
+    }
+    LaunchedEffect(Unit) {
+        app.settingsDataStore.temperature.collect { temperature = it.toString() }
+    }
+    LaunchedEffect(Unit) {
+        app.settingsDataStore.topP.collect { topP = it.toString() }
     }
 
     val importLauncher = rememberLauncherForActivityResult(
@@ -150,6 +173,63 @@ fun SettingsScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
 
+            Text("上下文与生成参数", style = MaterialTheme.typography.titleMedium)
+
+            OutlinedTextField(
+                value = contextWindowTokens,
+                onValueChange = { contextWindowTokens = it },
+                label = { Text("Context Window Tokens") },
+                supportingText = { Text("MiMo v2.5 官方默认：1,000,000") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            OutlinedTextField(
+                value = maxTokens,
+                onValueChange = { maxTokens = it },
+                label = { Text("Max Output Tokens") },
+                supportingText = { Text("作为 max_completion_tokens 发送；MiMo v2.5 最大输出：128,000") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            OutlinedTextField(
+                value = safetyMarginTokens,
+                onValueChange = { safetyMarginTokens = it },
+                label = { Text("Safety Margin Tokens") },
+                supportingText = { Text("后续上下文压缩会用于预留安全余量") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = temperature,
+                    onValueChange = { temperature = it },
+                    label = { Text("Temperature") },
+                    supportingText = { Text("MiMo v2.5 默认：1.0") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = topP,
+                    onValueChange = { topP = it },
+                    label = { Text("Top P") },
+                    supportingText = { Text("MiMo 默认：0.95") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            OutlinedTextField(
+                value = compressionMessageTurnThreshold,
+                onValueChange = { compressionMessageTurnThreshold = it },
+                label = { Text("压缩触发轮数") },
+                supportingText = { Text("后续 rolling summary 使用；默认 200 轮") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+            )
+
             HorizontalDivider()
 
             Text("默认会话配置", style = MaterialTheme.typography.titleMedium)
@@ -219,7 +299,12 @@ fun SettingsScreen(onBack: () -> Unit) {
                         app.settingsDataStore.saveModelName(modelName)
                         app.settingsDataStore.saveDefaultUseMemory(defaultUseMemory)
                         app.settingsDataStore.saveDefaultGenerateMemory(defaultGenerateMemory)
-                        app.settingsDataStore.saveMaxTokens(maxTokens.toIntOrNull() ?: 8192)
+                        app.settingsDataStore.saveMaxTokens(maxTokens.toIntOrNull() ?: ModelRuntimeDefaults.MIMO_V25_MAX_COMPLETION_TOKENS)
+                        app.settingsDataStore.saveContextWindowTokens(contextWindowTokens.toIntOrNull() ?: ModelRuntimeDefaults.MIMO_V25_CONTEXT_WINDOW_TOKENS)
+                        app.settingsDataStore.saveSafetyMarginTokens(safetyMarginTokens.toIntOrNull() ?: ModelRuntimeDefaults.DEFAULT_SAFETY_MARGIN_TOKENS)
+                        app.settingsDataStore.saveCompressionMessageTurnThreshold(compressionMessageTurnThreshold.toIntOrNull() ?: ModelRuntimeDefaults.DEFAULT_COMPRESSION_MESSAGE_TURN_THRESHOLD)
+                        app.settingsDataStore.saveTemperature(temperature.toFloatOrNull() ?: ModelRuntimeDefaults.MIMO_V25_TEMPERATURE.toFloat())
+                        app.settingsDataStore.saveTopP(topP.toFloatOrNull() ?: ModelRuntimeDefaults.MIMO_V25_TOP_P.toFloat())
                         Toast.makeText(context, "设置已保存", Toast.LENGTH_SHORT).show()
                     }
                 },

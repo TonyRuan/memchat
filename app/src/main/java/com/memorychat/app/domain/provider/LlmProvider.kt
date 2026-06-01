@@ -25,7 +25,9 @@ class OpenAICompatibleProvider(
     private val apiKey: String,
     private val baseUrl: String,
     private val modelName: String,
-    private val maxTokens: Int = 8192
+    private val maxTokens: Int = com.memorychat.app.domain.model.ModelRuntimeDefaults.MIMO_V25_MAX_COMPLETION_TOKENS,
+    private val temperature: Double = com.memorychat.app.domain.model.ModelRuntimeDefaults.MIMO_V25_TEMPERATURE,
+    private val topP: Double = com.memorychat.app.domain.model.ModelRuntimeDefaults.MIMO_V25_TOP_P
 ) : LlmProvider {
 
     private val client = OkHttpClient.Builder()
@@ -38,6 +40,8 @@ class OpenAICompatibleProvider(
             addProperty("model", request.model)
             addProperty("stream", stream)
             addProperty("max_completion_tokens", maxTokens)
+            addProperty("temperature", temperature)
+            addProperty("top_p", topP)
             val msgs = com.google.gson.JsonArray()
             request.messages.forEach { msg ->
                 msgs.add(JsonObject().apply {

@@ -79,9 +79,12 @@ class AdbInputReceiver : BroadcastReceiver() {
                 val apiKey = ds.apiKey.first()
                 val baseUrl = ds.baseUrl.first()
                 val model = ds.modelName.first()
+                val maxTokens = ds.maxTokens.first()
+                val temperature = ds.temperature.first().toDouble()
+                val topP = ds.topP.first().toDouble()
 
                 if (apiKey.isNotBlank()) {
-                    val provider = OpenAICompatibleProvider(apiKey, baseUrl, model)
+                    val provider = OpenAICompatibleProvider(apiKey, baseUrl, model, maxTokens, temperature, topP)
                     val conversationEntity = db.conversationDao().getById(conversationId)
                     val conversation = conversationEntity?.let {
                         Conversation(

@@ -1,5 +1,23 @@
 # MemoryChat Development Log
 
+## v1.0.63 (2026-06-01)
+
+### Changes
+- Added user-configurable context and generation settings for context window tokens, max output tokens, safety margin, temperature, top_p, and future compression trigger turns
+- Updated MiMo defaults from official docs: `mimo-v2.5` context window `1,000,000`, maximum output `128,000`, `temperature=1.0`, `top_p=0.95`
+- Passed saved `max_completion_tokens`, `temperature`, and `top_p` into both Chat UI and ADB model requests
+- Kept compression trigger turns configurable for the upcoming rolling-summary implementation, defaulting to `200`
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.provider.OpenAICompatibleProviderTest"`
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.63-debug.apk`
+
+---
+
 ## v1.0.62 (2026-06-01)
 
 ### Changes

@@ -2,6 +2,8 @@ package com.memorychat.app.domain.provider
 
 import com.memorychat.app.domain.model.ChatMessage
 import com.memorychat.app.domain.model.ChatRequest
+import com.memorychat.app.domain.model.ModelRuntimeDefaults
+import com.google.gson.JsonParser
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
@@ -11,6 +13,39 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OpenAICompatibleProviderTest {
+    @Test
+    fun mimoRuntimeDefaultsMatchOfficialModelLimits() {
+        assertEquals(1_000_000, ModelRuntimeDefaults.MIMO_V25_CONTEXT_WINDOW_TOKENS)
+        assertEquals(128_000, ModelRuntimeDefaults.MIMO_V25_MAX_COMPLETION_TOKENS)
+        assertEquals(2_000, ModelRuntimeDefaults.DEFAULT_SAFETY_MARGIN_TOKENS)
+        assertEquals(200, ModelRuntimeDefaults.DEFAULT_COMPRESSION_MESSAGE_TURN_THRESHOLD)
+        assertEquals(1.0, ModelRuntimeDefaults.MIMO_V25_TEMPERATURE, 0.0)
+        assertEquals(0.95, ModelRuntimeDefaults.MIMO_V25_TOP_P, 0.0)
+    }
+
+    @Test
+    fun completeSendsConfiguredGenerationParameters() = runTest {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"choices":[{"message":{"content":"ok"}}]}"""))
+            server.start()
+            val provider = OpenAICompatibleProvider(
+                apiKey = "key",
+                baseUrl = server.url("/v1").toString().trimEnd('/'),
+                modelName = "model",
+                maxTokens = 128_000,
+                temperature = 1.0,
+                topP = 0.95
+            )
+
+            provider.complete(ChatRequest(listOf(ChatMessage(role = "user", content = "hi")), "model", false))
+
+            val body = JsonParser.parseString(server.takeRequest().body.readUtf8()).asJsonObject
+            assertEquals(128_000, body.get("max_completion_tokens").asInt)
+            assertEquals(1.0, body.get("temperature").asDouble, 0.0)
+            assertEquals(0.95, body.get("top_p").asDouble, 0.0)
+        }
+    }
+
     @Test
     fun completeReturnsContentForValidResponse() = runTest {
         MockWebServer().use { server ->
