@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.memorychat.app.domain.model.ChatMessage
 import com.memorychat.app.ui.components.MemoryExtractionIndicator
+import com.memorychat.app.ui.markdown.MarkdownText
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -262,11 +263,16 @@ fun MessageBubble(message: ChatMessage, onLongClick: () -> Unit) {
                 )
                 .padding(12.dp)
         ) {
-            Text(
-                text = message.content,
-                color = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            val textColor = if (isUser) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            if (isUser) {
+                Text(text = message.content, color = textColor)
+            } else {
+                MarkdownText(markdown = message.content, color = textColor)
+            }
         }
     }
 }

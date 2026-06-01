@@ -31,6 +31,7 @@ RULES:
         ): String {
             val sb = StringBuilder()
             sb.appendLine("Use the following long-term memory and context to answer naturally. Do not frequently mention 'according to my memory'. If memory conflicts with current message, follow the current message.")
+            sb.appendLine("Response style: Use concise Markdown when it improves readability, including bullet lists and code fences for code. Do not output HTML.")
             sb.appendLine()
 
             if (persona != null) {

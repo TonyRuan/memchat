@@ -64,6 +64,7 @@ Rules:
 - Natural wording such as "给你改名字为比比拉布" is an assistant persona update.
 - If the user asks the assistant to call or address the user by a name, category is user_addressing_preference and is_persona_instruction is false.
 - If the user describes their own name, preference, or profile, category is user_profile and is_persona_instruction is false.
+- Temporary formatting requests for the current answer are not Persona updates. Examples: "请用 Markdown 回复", "这次用列表回答", "用代码块展示" are category other unless the user explicitly says this should be a lasting assistant rule.
 - If the message is unrelated to assistant persona or user addressing/profile, category is other and is_persona_instruction is false.
 - Keep names concise and remove trailing particles such as 吧, 啦, 哦, 呀.
 

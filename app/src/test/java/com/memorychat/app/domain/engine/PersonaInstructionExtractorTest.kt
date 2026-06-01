@@ -290,4 +290,34 @@ class PersonaInstructionExtractorTest {
         assertNull(negatedInstruction)
         assertEquals(2, provider.completeRequests.size)
     }
+
+    @Test
+    fun treatsOneOffMarkdownReplyFormatAsOther() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "category": "other",
+                  "is_persona_instruction": false,
+                  "name": null,
+                  "role": null,
+                  "tone": null,
+                  "behavior_rules": [],
+                  "boundaries": []
+                }
+                """.trimIndent()
+            )
+        )
+        val extractor = PersonaInstructionExtractor(provider, "fake-model")
+
+        val instruction = extractor.detect(
+            content = "请用 Markdown 回复，包含一个二级标题、两个项目符号和一个 kotlin 代码块，内容简短。",
+            currentPersona = Persona(name = "露露")
+        )
+
+        assertNull(instruction)
+        val prompt = provider.completeRequests.single().messages.single().content
+        assertTrue(prompt.contains("Temporary formatting requests"))
+        assertTrue(prompt.contains("请用 Markdown 回复"))
+    }
 }

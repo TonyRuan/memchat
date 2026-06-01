@@ -114,6 +114,20 @@ class MemoryEngineTest {
     }
 
     @Test
+    fun buildRecallPromptAsksForMarkdownWhenHelpful() {
+        val prompt = MemoryEngine.buildRecallPrompt(
+            persona = null,
+            preferences = emptyList(),
+            profile = emptyList(),
+            projects = emptyList(),
+            summaries = emptyList()
+        )
+
+        assertTrue(prompt.contains("Markdown"))
+        assertTrue(prompt.contains("code fences"))
+    }
+
+    @Test
     fun extractionPromptIncludesExistingMemoryIdsForModelUpdates() = runTest {
         val provider = FakeLlmProvider(completeResponses = listOf("""{"new_memories":[]}"""))
         val engine = MemoryEngine(provider, "fake-model")

@@ -213,7 +213,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun buildSystemPrompt(memories: List<Memory>, persona: Persona? = null): String {
-        if (memories.isEmpty() && persona == null) return ""
         return MemoryEngine.buildRecallPrompt(
             persona = persona,
             preferences = memories.filter { it.type == MemoryType.PREFERENCE },

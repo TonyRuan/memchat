@@ -142,21 +142,26 @@ class AdbInputReceiver : BroadcastReceiver() {
                             Log.i("AdbInput", "  -> [${mem.type}] ${mem.content.take(50)}")
                         }
 
-                        if (recall.memories.isNotEmpty()) {
-                            val systemPrompt = MemoryEngine.buildRecallPrompt(
-                                persona = persona,
-                                preferences = recall.memories.filter { it.type == MemoryType.PREFERENCE },
-                                profile = recall.memories.filter { it.type == MemoryType.PROFILE },
-                                projects = recall.memories.filter { it.type == MemoryType.PROJECT },
-                                summaries = recall.memories.filter { it.type == MemoryType.SUMMARY }
-                            )
-                            if (systemPrompt.isNotBlank()) {
-                                messages.add(ChatMessage(role = "system", content = systemPrompt))
-                                Log.i("AdbInput", "  System prompt injected (${systemPrompt.length} chars)")
-                            }
-                        }
+                        val systemPrompt = MemoryEngine.buildRecallPrompt(
+                            persona = persona,
+                            preferences = recall.memories.filter { it.type == MemoryType.PREFERENCE },
+                            profile = recall.memories.filter { it.type == MemoryType.PROFILE },
+                            projects = recall.memories.filter { it.type == MemoryType.PROJECT },
+                            summaries = recall.memories.filter { it.type == MemoryType.SUMMARY }
+                        )
+                        messages.add(ChatMessage(role = "system", content = systemPrompt))
+                        Log.i("AdbInput", "  System prompt injected (${systemPrompt.length} chars)")
                     } else {
                         Log.i("AdbInput", "  No memories in DB, skipping recall")
+                        val systemPrompt = MemoryEngine.buildRecallPrompt(
+                            persona = persona,
+                            preferences = emptyList(),
+                            profile = emptyList(),
+                            projects = emptyList(),
+                            summaries = emptyList()
+                        )
+                        messages.add(ChatMessage(role = "system", content = systemPrompt))
+                        Log.i("AdbInput", "  System prompt injected (${systemPrompt.length} chars)")
                     }
 
                     messages.add(ChatMessage(role = "user", content = message))

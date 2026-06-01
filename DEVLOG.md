@@ -1,5 +1,29 @@
 # MemoryChat Development Log
 
+## v1.0.55 (2026-06-01)
+
+### Changes
+- Added assistant-message Markdown rich text rendering for headings, paragraphs, bold, italic, inline code, links, bullet lists, quotes, and fenced code blocks
+- Kept user messages as plain text while preserving raw Markdown in message storage
+- Added a lightweight in-project Markdown parser with fallback to plain text for unclosed inline markers
+- Updated chat system prompts to allow concise Markdown, bullet lists, and code fences when useful, while disallowing HTML
+- Injected the response style prompt in both Chat UI and ADB message flows
+- Updated the emulator smoke script default APK path to v1.0.55
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.ui.markdown.MarkdownParserTest" --tests "com.memorychat.app.domain.engine.MemoryEngineTest.buildRecallPromptAsksForMarkdownWhenHelpful"` (RED failed before implementation, then passed)
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+- Android emulator QA on `emulator-5554`: installed v1.0.55 and launched `com.memorychat.app/.MainActivity`
+- ADB real-model Markdown smoke: sent a Markdown response request, confirmed the system prompt was injected, the normal chat API path returned a heading, bullets, and a fenced Kotlin code block
+- Chat UI screenshot verification: opened the conversation and confirmed the assistant bubble rendered the heading, bullet list, and code block as rich text rather than raw Markdown markers
+- Regression check: one-off Markdown formatting requests are treated as `other` in Persona classification and no longer trigger Persona acknowledgement
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.55-debug.apk`
+
+---
+
 ## v1.0.54 (2026-06-01)
 
 ### Changes
