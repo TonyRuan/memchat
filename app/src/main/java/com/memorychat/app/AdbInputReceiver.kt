@@ -90,7 +90,7 @@ class AdbInputReceiver : BroadcastReceiver() {
                     }
                     var persona = conversation?.personaId?.let { personaRepo.getPersona(it) }
                     persona?.let { currentPersona ->
-                        PersonaInstructionExtractor(provider, model).detect(message)?.let { instruction ->
+                        PersonaInstructionExtractor(provider, model).detect(message, currentPersona)?.let { instruction ->
                             val updatedPersona = PersonaInstructionDetector.apply(currentPersona, instruction)
                             personaRepo.savePersona(updatedPersona)
                             persona = updatedPersona

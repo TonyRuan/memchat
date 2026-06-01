@@ -1,5 +1,24 @@
 # MemoryChat Development Log
 
+## v1.0.50 (2026-06-01)
+
+### Changes
+- Passed the current Persona into the model-backed Persona instruction extractor so subjectless follow-up renames can be understood in context
+- Added fallback gating for short rename messages such as `改成猪妞吧` when a current Persona exists
+- Updated the Persona extraction prompt with current assistant persona name, role, and tone
+- Wired the contextual Persona extractor through both chat UI and ADB message paths
+- Updated the emulator smoke script default APK path to v1.0.50
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.PersonaInstructionExtractorTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.50-debug.apk`
+
+---
+
 ## v1.0.49 (2026-06-01)
 
 ### Changes

@@ -4,6 +4,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.memorychat.app.domain.model.ChatMessage
 import com.memorychat.app.domain.model.ChatRequest
+import com.memorychat.app.domain.model.Persona
 import com.memorychat.app.domain.provider.LlmProvider
 import com.memorychat.app.util.AppLogger
 
@@ -11,14 +12,14 @@ class PersonaInstructionExtractor(
     private val llmProvider: LlmProvider,
     private val modelName: String
 ) {
-    suspend fun detect(content: String): PersonaInstruction? {
+    suspend fun detect(content: String, currentPersona: Persona? = null): PersonaInstruction? {
         PersonaInstructionDetector.detect(content)?.let { return it }
-        if (!shouldUseModelFallback(content)) return null
+        if (!shouldUseModelFallback(content, currentPersona)) return null
 
         return try {
             val response = llmProvider.complete(
                 ChatRequest(
-                    messages = listOf(ChatMessage(role = "user", content = buildPrompt(content))),
+                    messages = listOf(ChatMessage(role = "user", content = buildPrompt(content, currentPersona))),
                     model = modelName,
                     stream = false
                 )
@@ -30,7 +31,7 @@ class PersonaInstructionExtractor(
         }
     }
 
-    private fun shouldUseModelFallback(content: String): Boolean {
+    private fun shouldUseModelFallback(content: String, currentPersona: Persona?): Boolean {
         val text = content.trim().lowercase()
         if (text.isBlank()) return false
         val userProfileName = listOf("我叫", "我的名字", "我的昵称", "my name is", "call me")
@@ -43,17 +44,31 @@ class PersonaInstructionExtractor(
         ).any { text.contains(it) }
         val personaIntent = listOf(
             "名字", "名称", "昵称", "称呼", "叫", "取名", "起名", "改名", "更名",
-            "语气", "风格", "说话方式", "角色", "身份", "性格", "人设", "规则"
+            "改成", "改为", "换成", "换为", "语气", "风格", "说话方式", "角色", "身份", "性格", "人设", "规则"
         ).any { text.contains(it) }
         val implicitAssistantNickname = listOf("固定昵称", "固定名称", "以后昵称", "以后名称")
             .any { text.contains(it) }
+        val subjectlessRename = currentPersona != null &&
+            listOf("改成", "改为", "换成", "换为").any { text.contains(it) } &&
+            text.length <= 24
 
-        return (assistantReference && personaIntent) || implicitAssistantNickname
+        return (assistantReference && personaIntent) || implicitAssistantNickname || subjectlessRename
     }
 
-    private fun buildPrompt(content: String): String {
+    private fun buildPrompt(content: String, currentPersona: Persona?): String {
+        val personaContext = currentPersona?.let {
+            """
+Current assistant persona:
+Name: ${it.name}
+Role: ${it.role}
+Tone: ${it.tone}
+""".trimIndent()
+        } ?: "Current assistant persona: (unknown)"
+
         return """
 You extract assistant persona instructions from a single user message.
+
+$personaContext
 
 Return strict JSON only:
 {
@@ -67,6 +82,7 @@ Return strict JSON only:
 
 Rules:
 - Assistant persona means the user is naming or configuring the assistant, not describing the user.
+- The user may omit the subject when continuing to rename the current assistant persona, e.g. "改成猪妞吧".
 - If the message sets the assistant's name, nickname, role, tone, personality, behavior rules, or boundaries, return true.
 - If the user describes their own name, preference, or profile, return false.
 - Keep names concise and remove trailing particles such as 吧, 啦, 哦, 呀.

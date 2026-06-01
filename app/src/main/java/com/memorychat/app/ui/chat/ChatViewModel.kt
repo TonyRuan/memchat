@@ -212,7 +212,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         provider: OpenAICompatibleProvider,
         model: String
     ): Persona {
-        val instruction = PersonaInstructionExtractor(provider, model).detect(content) ?: return persona
+        val instruction = PersonaInstructionExtractor(provider, model).detect(content, persona) ?: return persona
         val updated = PersonaInstructionDetector.apply(persona, instruction)
         app.personaRepo.savePersona(updated)
         AppLogger.i("ChatVM", "Persona updated from user instruction: ${updated.id}")
