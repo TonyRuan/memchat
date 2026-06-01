@@ -60,4 +60,24 @@ class MemoryExtractionCoordinatorTest {
         assertTrue(secondStarted)
         assertEquals(2, runCount)
     }
+
+    @Test
+    fun exposesActiveConversationIdsWhileJobsRun() = runTest {
+        val coordinator = MemoryExtractionCoordinator()
+        val release = CompletableDeferred<Unit>()
+
+        coordinator.launchIfIdle("conv-1", backgroundScope) {
+            release.await()
+        }
+        runCurrent()
+
+        assertEquals(setOf("conv-1"), coordinator.activeConversationIds.value)
+        assertTrue(coordinator.isAnyActive.value)
+
+        release.complete(Unit)
+        runCurrent()
+
+        assertEquals(emptySet<String>(), coordinator.activeConversationIds.value)
+        assertFalse(coordinator.isAnyActive.value)
+    }
 }

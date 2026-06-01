@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.memorychat.app.domain.model.ChatMessage
+import com.memorychat.app.ui.components.MemoryExtractionIndicator
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,6 +36,8 @@ fun ChatScreen(
     val streamingContent by viewModel.streamingContent.collectAsState()
     val conversation by viewModel.conversation.collectAsState()
     val memoryExtractionStatus by viewModel.memoryExtractionStatus.collectAsState()
+    val activeExtractionConversations by viewModel.activeMemoryExtractionConversationIds.collectAsState()
+    val isCurrentConversationExtracting = conversationId in activeExtractionConversations
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -148,6 +151,9 @@ fun ChatScreen(
                     }
                 },
                 actions = {
+                    if (isCurrentConversationExtracting) {
+                        MemoryExtractionIndicator(modifier = Modifier.padding(end = 8.dp))
+                    }
                     IconButton(onClick = { showSettingsDialog = true }) {
                         Icon(Icons.Default.Settings, "Session Settings")
                     }

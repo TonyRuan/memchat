@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.memorychat.app.ui.components.MemoryExtractionIndicator
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -26,12 +27,16 @@ fun ConversationListScreen(
     viewModel: ConversationListViewModel = viewModel()
 ) {
     val conversations by viewModel.conversations.collectAsState()
+    val isMemoryExtractionActive by viewModel.isMemoryExtractionActive.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("MemoryChat") },
                 actions = {
+                    if (isMemoryExtractionActive) {
+                        MemoryExtractionIndicator(modifier = Modifier.padding(end = 8.dp))
+                    }
                     IconButton(onClick = onNavigateToLogs) {
                         Icon(Icons.Default.BugReport, "Logs")
                     }

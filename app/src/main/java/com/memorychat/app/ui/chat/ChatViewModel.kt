@@ -40,6 +40,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _memoryExtractionStatus = MutableStateFlow<String?>(null)
     val memoryExtractionStatus: StateFlow<String?> = _memoryExtractionStatus
+    val activeMemoryExtractionConversationIds = app.activeMemoryExtractionConversationIds
 
     private var llmProvider: OpenAICompatibleProvider? = null
     private var memoryEngine: MemoryEngine? = null

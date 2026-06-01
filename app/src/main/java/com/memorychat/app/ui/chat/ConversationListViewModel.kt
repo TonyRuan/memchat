@@ -15,6 +15,7 @@ class ConversationListViewModel(application: Application) : AndroidViewModel(app
 
     private val _conversations = MutableStateFlow<List<Conversation>>(emptyList())
     val conversations: StateFlow<List<Conversation>> = _conversations
+    val isMemoryExtractionActive = app.isMemoryExtractionActive
 
     init {
         loadConversations()

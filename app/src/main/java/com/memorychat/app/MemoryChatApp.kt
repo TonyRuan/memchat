@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class MemoryChatApp : Application() {
@@ -56,4 +57,10 @@ class MemoryChatApp : Application() {
     ): Boolean {
         return memoryExtractionCoordinator.launchIfIdle(conversationId, applicationScope, block)
     }
+
+    val activeMemoryExtractionConversationIds: StateFlow<Set<String>>
+        get() = memoryExtractionCoordinator.activeConversationIds
+
+    val isMemoryExtractionActive: StateFlow<Boolean>
+        get() = memoryExtractionCoordinator.isAnyActive
 }

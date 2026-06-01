@@ -1,5 +1,23 @@
 # MemoryChat Development Log
 
+## v1.0.46 (2026-06-01)
+
+### Changes
+- Exposed active background memory extraction state from `MemoryExtractionCoordinator`
+- Added a small non-blocking memory extraction indicator to the conversation list top bar when any extraction job is active
+- Added the same indicator to the chat top bar for the current conversation only
+- Updated the emulator smoke script default APK path to v1.0.46
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.MemoryExtractionCoordinatorTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.46-debug.apk`
+
+---
+
 ## v1.0.45 (2026-06-01)
 
 ### Changes
