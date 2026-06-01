@@ -89,9 +89,21 @@ class PersonaInstructionExtractorTest {
     }
 
     @Test
-    fun doesNotCallModelForUserAddressingRequest() = runTest {
+    fun usesModelClassificationForUserAddressingRequest() = runTest {
         val provider = FakeLlmProvider(
-            completeResponses = listOf("""{"is_persona_instruction":true,"name":"我大王"}""")
+            completeResponses = listOf(
+                """
+                {
+                  "category": "user_addressing_preference",
+                  "is_persona_instruction": false,
+                  "name": "大王",
+                  "role": null,
+                  "tone": null,
+                  "behavior_rules": [],
+                  "boundaries": []
+                }
+                """.trimIndent()
+            )
         )
         val extractor = PersonaInstructionExtractor(provider, "fake-model")
 
@@ -101,6 +113,102 @@ class PersonaInstructionExtractorTest {
         )
 
         assertNull(instruction)
-        assertTrue(provider.completeRequests.isEmpty())
+        val prompt = provider.completeRequests.single().messages.single().content
+        assertTrue(prompt.contains("user_addressing_preference"))
+        assertTrue(prompt.contains("你叫我大王吧"))
+    }
+
+    @Test
+    fun usesModelClassificationForSubjectlessUserAddressingRequest() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "category": "user_addressing_preference",
+                  "is_persona_instruction": false,
+                  "name": "大王",
+                  "role": null,
+                  "tone": null,
+                  "behavior_rules": [],
+                  "boundaries": []
+                }
+                """.trimIndent()
+            )
+        )
+        val extractor = PersonaInstructionExtractor(provider, "fake-model")
+
+        val instruction = extractor.detect(
+            content = "以后叫我大王就好",
+            currentPersona = Persona(name = "猪妞")
+        )
+
+        assertNull(instruction)
+        assertTrue(provider.completeRequests.single().messages.single().content.contains("以后叫我大王就好"))
+    }
+
+    @Test
+    fun suppressesModelResultWhenCategoryIsNotAssistantPersonaUpdate() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "category": "user_addressing_preference",
+                  "is_persona_instruction": true,
+                  "name": "我大王",
+                  "role": null,
+                  "tone": null,
+                  "behavior_rules": [],
+                  "boundaries": []
+                }
+                """.trimIndent()
+            )
+        )
+        val extractor = PersonaInstructionExtractor(provider, "fake-model")
+
+        val instruction = extractor.detect(
+            content = "你以后可以尊称我大王",
+            currentPersona = Persona(name = "猪妞")
+        )
+
+        assertNull(instruction)
+        assertTrue(provider.completeRequests.single().messages.single().content.contains("你以后可以尊称我大王"))
+    }
+
+    @Test
+    fun usesModelClassificationForAddressingVariants() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "category": "user_addressing_preference",
+                  "is_persona_instruction": false,
+                  "name": "King",
+                  "role": null,
+                  "tone": null,
+                  "behavior_rules": [],
+                  "boundaries": []
+                }
+                """.trimIndent(),
+                """
+                {
+                  "category": "user_addressing_preference",
+                  "is_persona_instruction": false,
+                  "name": null,
+                  "role": null,
+                  "tone": null,
+                  "behavior_rules": [],
+                  "boundaries": []
+                }
+                """.trimIndent()
+            )
+        )
+        val extractor = PersonaInstructionExtractor(provider, "fake-model")
+
+        val englishInstruction = extractor.detect("call me King", Persona(name = "猪妞"))
+        val negatedInstruction = extractor.detect("以后别叫我大王了", Persona(name = "猪妞"))
+
+        assertNull(englishInstruction)
+        assertNull(negatedInstruction)
+        assertEquals(2, provider.completeRequests.size)
     }
 }

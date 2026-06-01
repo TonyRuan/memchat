@@ -1,5 +1,26 @@
 # MemoryChat Development Log
 
+## v1.0.52 (2026-06-01)
+
+### Changes
+- Changed ambiguous Persona/name messages to use model-backed semantic classification instead of hard user-addressing exclusion
+- Added extraction categories for `assistant_persona_update`, `user_addressing_preference`, `user_profile`, and `other`
+- Kept deterministic Persona detection as the fast path for clear assistant Persona updates, while ambiguous addressing messages now ask the model to classify intent
+- Added regression coverage for subjectless and assistant-referenced user-addressing messages such as `以后叫我大王就好` and `你叫我大王吧`
+- Updated the emulator smoke script default APK path to v1.0.52
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.PersonaInstructionDetectorTest" --tests "com.memorychat.app.domain.engine.PersonaInstructionExtractorTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+- Android emulator QA on `emulator-5554`: installed v1.0.52, launched `com.memorychat.app/.MainActivity`, and captured screenshot
+- ADB real-model Persona regression smoke: sent `以后叫我大王就好`; `persona_default` stayed `猪妞`, no `Persona updated` log was emitted, and the assistant replied using `大王`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.52-debug.apk`
+
+---
+
 ## v1.0.51 (2026-06-01)
 
 ### Changes

@@ -34,12 +34,14 @@ class PersonaInstructionExtractor(
     private fun shouldUseModelFallback(content: String, currentPersona: Persona?): Boolean {
         val text = content.trim().lowercase()
         if (text.isBlank()) return false
-        if (PersonaInstructionDetector.isUserAddressingRequest(content)) return false
 
-        val userProfileName = listOf("我叫", "我的名字", "我的昵称", "my name is", "call me")
+        val userProfileName = listOf("我叫", "我的名字", "我的昵称", "my name is")
             .any { text.contains(it) }
         if (userProfileName) return false
 
+        val userAddressingIntent = listOf(
+            "叫我", "称呼我", "喊我", "管我", "尊称我", "call me"
+        ).any { text.contains(it) }
         val assistantReference = listOf(
             "你", "你的", "给你", "把你", "帮你", "为你",
             "助手", "ai", "agent", "assistant"
@@ -54,7 +56,7 @@ class PersonaInstructionExtractor(
             listOf("改成", "改为", "换成", "换为").any { text.contains(it) } &&
             text.length <= 24
 
-        return (assistantReference && personaIntent) || implicitAssistantNickname || subjectlessRename
+        return userAddressingIntent || (assistantReference && personaIntent) || implicitAssistantNickname || subjectlessRename
     }
 
     private fun buildPrompt(content: String, currentPersona: Persona?): String {
@@ -74,6 +76,7 @@ $personaContext
 
 Return strict JSON only:
 {
+  "category": "assistant_persona_update"|"user_addressing_preference"|"user_profile"|"other",
   "is_persona_instruction": true|false,
   "name": string|null,
   "role": string|null,
@@ -86,7 +89,9 @@ Rules:
 - Assistant persona means the user is naming or configuring the assistant, not describing the user.
 - The user may omit the subject when continuing to rename the current assistant persona, e.g. "改成猪妞吧".
 - If the message sets the assistant's name, nickname, role, tone, personality, behavior rules, or boundaries, return true.
-- If the user describes their own name, preference, or profile, return false.
+- If the user asks the assistant to call or address the user by a name, category is user_addressing_preference and is_persona_instruction is false.
+- If the user describes their own name, preference, or profile, category is user_profile and is_persona_instruction is false.
+- If the message is unrelated to assistant persona or user addressing/profile, category is other and is_persona_instruction is false.
 - Keep names concise and remove trailing particles such as 吧, 啦, 哦, 呀.
 
 User message:
@@ -96,6 +101,12 @@ $content
 
     private fun parseModelInstruction(raw: String): PersonaInstruction? {
         val obj = extractJsonObject(raw)
+        val category = obj.stringOrNull("category") ?: if (obj.get("is_persona_instruction")?.asBoolean == true) {
+            "assistant_persona_update"
+        } else {
+            "other"
+        }
+        if (category != "assistant_persona_update") return null
         if (obj.get("is_persona_instruction")?.asBoolean != true) return null
         val instruction = PersonaInstruction(
             name = obj.stringOrNull("name")?.cleanModelValue(),
