@@ -1,5 +1,26 @@
 # MemoryChat Development Log
 
+## v1.0.60 (2026-06-01)
+
+### Changes
+- Fixed UI chat Agent routing on Android by running blocking `complete()` calls on `Dispatchers.IO`
+- This prevents `NetworkOnMainThreadException` from causing empty Agent decisions and disabling `web_search` for ordinary Chat UI messages
+- Updated the emulator smoke script default APK path to v1.0.60
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.provider.OpenAICompatibleProviderTest"`
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+- PASS: physical-device UI search smoke on `10AE2P094M002SL`
+  - Installed v1.0.60 and sent `Will it rain in Shenzhen this weekend` through the real Chat UI
+  - Logcat showed `Agent tools: calls=1, results=1` and `Stream request: model=mimo-v2.5, webSearch=true`
+  - UI response used search results to answer that Shenzhen is expected to have rain over the weekend
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.60-debug.apk`
+
+---
+
 ## v1.0.59 (2026-06-01)
 
 ### Changes

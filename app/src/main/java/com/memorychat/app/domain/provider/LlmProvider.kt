@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -137,11 +138,13 @@ class OpenAICompatibleProvider(
     }.flowOn(Dispatchers.IO)
 
     override suspend fun complete(request: ChatRequest): ChatResponse {
-        return try {
-            completeInternal(request, allowWebSearchFallback = true)
-        } catch (e: Exception) {
-            AppLogger.e("LlmProvider", "complete() failed: ${e.javaClass.simpleName}: ${e.message}")
-            throw e
+        return withContext(Dispatchers.IO) {
+            try {
+                completeInternal(request, allowWebSearchFallback = true)
+            } catch (e: Exception) {
+                AppLogger.e("LlmProvider", "complete() failed: ${e.javaClass.simpleName}: ${e.message}")
+                throw e
+            }
         }
     }
 
