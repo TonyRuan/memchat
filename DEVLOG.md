@@ -1,5 +1,24 @@
 # MemoryChat Development Log
 
+## v1.0.44 (2026-06-01)
+
+### Changes
+- Added an application-level `MemoryExtractionCoordinator` keyed by conversation ID so rapid exit/re-enter/exit cannot launch duplicate background extraction for the same conversation
+- Switched chat memory extraction scheduling from ViewModel-local job tracking to the shared coordinator
+- Kept different conversations able to run extraction independently
+- Updated the emulator smoke script default APK path to v1.0.44
+
+### Verification
+- `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.MemoryExtractionCoordinatorTest"` (RED failed before implementation, then passed)
+- `.\gradlew.bat test`
+- `.\gradlew.bat assembleDebug`
+- Skipped emulator/APK-install smoke per user request
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.44-debug.apk`
+
+---
+
 ## v1.0.43 (2026-06-01)
 
 ### Changes

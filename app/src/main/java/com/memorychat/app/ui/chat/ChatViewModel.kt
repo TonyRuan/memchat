@@ -43,7 +43,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var llmProvider: OpenAICompatibleProvider? = null
     private var memoryEngine: MemoryEngine? = null
     private var streamJob: Job? = null
-    private var memoryExtractionJob: Job? = null
     private val sendGate = GenerationSendGate()
     private val extractionPolicy = MemoryExtractionTriggerPolicy()
 
@@ -251,17 +250,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         userMsg: ChatMessage
     ) {
         if (!conv.generateMemory) return
-        if (memoryExtractionJob?.isActive == true) {
-            AppLogger.i("ChatVM", "Memory extraction check skipped: job already active")
-            return
-        }
-        memoryExtractionJob = app.launchBackground {
+        val launched = app.launchMemoryExtractionIfIdle(conv.id) {
             val unextractedMessages = getUnextractedMessages(conv.id)
             val trigger = extractionPolicy.afterAssistantTurn(unextractedMessages, userMsg) ?: run {
                 AppLogger.i("ChatVM", "Memory extraction deferred: unextracted=${unextractedMessages.size}")
-                return@launchBackground
+                return@launchMemoryExtractionIfIdle
             }
             runBackgroundMemoryExtraction(engine, conv, trigger, unextractedMessages)
+        }
+        if (!launched) {
+            AppLogger.i("ChatVM", "Memory extraction check skipped: conversation already active")
         }
     }
 
@@ -271,21 +269,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         trigger: MemoryExtractionTrigger
     ) {
         if (!conv.generateMemory) return
-        if (memoryExtractionJob?.isActive == true) {
-            AppLogger.i("ChatVM", "Memory extraction already running, skip trigger=$trigger")
-            return
-        }
-        memoryExtractionJob = app.launchBackground {
+        val launched = app.launchMemoryExtractionIfIdle(conv.id) {
             val unextractedMessages = getUnextractedMessages(conv.id)
             val effectiveTrigger = if (trigger == MemoryExtractionTrigger.CONVERSATION_EXIT) {
                 extractionPolicy.onConversationExit(unextractedMessages) ?: run {
                     AppLogger.i("ChatVM", "Memory extraction exit flush skipped: no unextracted user messages")
-                    return@launchBackground
+                    return@launchMemoryExtractionIfIdle
                 }
             } else {
                 trigger
             }
             runBackgroundMemoryExtraction(engine, conv, effectiveTrigger, unextractedMessages)
+        }
+        if (!launched) {
+            AppLogger.i("ChatVM", "Memory extraction already running for conversation, skip trigger=$trigger")
         }
     }
 

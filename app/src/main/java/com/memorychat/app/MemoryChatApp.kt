@@ -4,6 +4,7 @@ import android.app.Application
 import com.memorychat.app.data.local.db.AppDatabase
 import com.memorychat.app.data.local.datastore.SettingsDataStore
 import com.memorychat.app.data.repository.*
+import com.memorychat.app.domain.engine.MemoryExtractionCoordinator
 import com.memorychat.app.domain.model.Persona
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -21,6 +22,7 @@ class MemoryChatApp : Application() {
     lateinit var personaRepo: PersonaRepository
     lateinit var exportImportService: ExportImportService
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val memoryExtractionCoordinator = MemoryExtractionCoordinator()
     private lateinit var defaultPersonaReady: Deferred<Persona>
 
     override fun onCreate() {
@@ -46,5 +48,12 @@ class MemoryChatApp : Application() {
 
     fun launchBackground(block: suspend CoroutineScope.() -> Unit): Job {
         return applicationScope.launch(block = block)
+    }
+
+    fun launchMemoryExtractionIfIdle(
+        conversationId: String,
+        block: suspend CoroutineScope.() -> Unit
+    ): Boolean {
+        return memoryExtractionCoordinator.launchIfIdle(conversationId, applicationScope, block)
     }
 }
