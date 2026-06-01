@@ -12,6 +12,7 @@ import com.memorychat.app.data.repository.MemoryRepository
 import com.memorychat.app.data.repository.PersonaRepository
 import com.memorychat.app.domain.agent.AgentDecision
 import com.memorychat.app.domain.agent.AgentDecisionEngine
+import com.memorychat.app.domain.agent.AgentFinalAnswerPolicy
 import com.memorychat.app.domain.agent.AgentPersonaStore
 import com.memorychat.app.domain.agent.AgentToolExecutor
 import com.memorychat.app.domain.model.ChatMessage
@@ -128,6 +129,20 @@ class AdbInputReceiver : BroadcastReceiver() {
                         )
                         persona = toolExecution.persona
                         Log.i("AdbInput", "Agent tools: calls=${decision.toolCalls.size}, results=${toolExecution.toolResults.size}")
+                        val finalAnswerDecision = AgentFinalAnswerPolicy.resolve(decision, toolExecution.appliedActions)
+                        if (!finalAnswerDecision.shouldCallModel && finalAnswerDecision.directAnswer != null) {
+                            db.messageDao().insert(
+                                MessageEntity(
+                                    id = java.util.UUID.randomUUID().toString(),
+                                    conversationId = conversationId,
+                                    role = "assistant",
+                                    content = finalAnswerDecision.directAnswer,
+                                    createdAt = System.currentTimeMillis()
+                                )
+                            )
+                            Log.i("AdbInput", "Direct agent action answer saved")
+                            return@launch
+                        }
                         runChatAndMemory(
                             provider = provider,
                             model = model,
@@ -141,6 +156,7 @@ class AdbInputReceiver : BroadcastReceiver() {
                             latestUserMessage = latestUserMessage,
                             decision = decision,
                             toolResults = toolExecution.toolResults,
+                            appliedActionLines = finalAnswerDecision.appliedActionLines,
                             skipTurnMemoryExtraction = toolExecution.memoryWritten,
                             extractionStore = extractionStore
                         )
@@ -293,6 +309,7 @@ class AdbInputReceiver : BroadcastReceiver() {
         latestUserMessage: ChatMessage,
         decision: AgentDecision,
         toolResults: List<String>,
+        appliedActionLines: List<String>,
         skipTurnMemoryExtraction: Boolean,
         extractionStore: MemoryExtractionStore
     ) {
@@ -320,7 +337,7 @@ class AdbInputReceiver : BroadcastReceiver() {
             projects = recall.memories.filter { it.type == MemoryType.PROJECT },
             summaries = recall.memories.filter { it.type == MemoryType.SUMMARY }
         )
-        val systemPrompt = decorateSystemPrompt(basePrompt, decision, toolResults)
+        val systemPrompt = decorateSystemPrompt(basePrompt, decision, toolResults, appliedActionLines)
         val messages = mutableListOf(
             ChatMessage(role = "system", content = systemPrompt),
             ChatMessage(role = "user", content = message)
@@ -394,7 +411,8 @@ class AdbInputReceiver : BroadcastReceiver() {
     private fun decorateSystemPrompt(
         basePrompt: String,
         decision: AgentDecision,
-        toolResults: List<String>
+        toolResults: List<String>,
+        appliedActionLines: List<String>
     ): String {
         return buildString {
             append(basePrompt)
@@ -408,6 +426,12 @@ class AdbInputReceiver : BroadcastReceiver() {
                 appendLine()
                 appendLine("[Tool Results]")
                 toolResults.forEach { appendLine("- $it") }
+            }
+            if (appliedActionLines.isNotEmpty()) {
+                appendLine()
+                appendLine("[Applied Actions]")
+                appendLine("These actions have already been applied to local app state. Treat them as observations, not suggestions.")
+                appliedActionLines.forEach { appendLine("- $it") }
             }
         }
     }

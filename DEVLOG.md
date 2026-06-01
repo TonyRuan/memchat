@@ -1,5 +1,29 @@
 # MemoryChat Development Log
 
+## v1.0.62 (2026-06-01)
+
+### Changes
+- Reworked Persona-setting replies around structured applied Agent actions instead of prompt-only refusal suppression
+- `AgentToolExecutor` now returns `AppliedAgentAction` observations for persisted Persona updates
+- Added `AgentFinalAnswerPolicy` so pure Persona-setting turns produce a deterministic acknowledgement and skip the final model call
+- Mixed turns can continue to the model with structured applied-action observations
+- Updated the emulator smoke script default APK path to v1.0.62
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.agent.AgentToolExecutorTest" --tests "com.memorychat.app.domain.agent.AgentFinalAnswerPolicyTest"`
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+- PASS: emulator Persona rename smoke on `emulator-5554`
+  - Installed v1.0.62 and sent `给你改名叫豆包` through `AdbInputReceiver`
+  - Logcat showed `Agent tools: calls=1, results=1` and `Direct agent action answer saved`
+  - Pulled Room DB with WAL and confirmed Persona name became `豆包` and assistant reply was `好的，已经改名为「豆包」。`
+  - Physical device `10AE2P094M002SL` was not connected during this run
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.62-debug.apk`
+
+---
+
 ## v1.0.61 (2026-06-01)
 
 ### Changes

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.memorychat.app.MemoryChatApp
 import com.memorychat.app.domain.agent.AgentDecision
 import com.memorychat.app.domain.agent.AgentDecisionEngine
+import com.memorychat.app.domain.agent.AgentFinalAnswerPolicy
 import com.memorychat.app.domain.agent.AgentPersonaStore
 import com.memorychat.app.domain.agent.AgentToolExecutor
 import com.memorychat.app.domain.model.*
@@ -113,6 +114,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val toolExecution = executeAgentTools(decision, loadedPersona, activeConv, listOf(userMsg))
                 val persona = toolExecution.persona
                 AppLogger.i("ChatVM", "Agent tools: calls=${decision.toolCalls.size}, results=${toolExecution.toolResults.size}")
+                val finalAnswerDecision = AgentFinalAnswerPolicy.resolve(decision, toolExecution.appliedActions)
+                if (!finalAnswerDecision.shouldCallModel && finalAnswerDecision.directAnswer != null) {
+                    val assistantMsg = ChatMessage(
+                        conversationId = activeConv.id,
+                        role = "assistant",
+                        content = finalAnswerDecision.directAnswer
+                    )
+                    app.conversationRepo.saveMessage(assistantMsg)
+                    _messages.value = _messages.value + assistantMsg
+                    completedTraceForTurn()?.let { trace ->
+                        _completedToolTraces.value = _completedToolTraces.value + (assistantMsg.id to trace)
+                    }
+                    AppLogger.i("ChatVM", "Direct agent action answer saved")
+                    finishGeneration()
+                    return@launch
+                }
 
                 val memories = if (activeConv.useMemory) {
                     val activeMemories = app.memoryRepo.getActiveMemories()
@@ -129,6 +146,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     memories = memories,
                     persona = persona,
                     toolResults = toolExecution.toolResults,
+                    appliedActionLines = finalAnswerDecision.appliedActionLines,
                     temporaryResponseFormat = decision.temporaryResponseFormat
                 )
                 val allMessages = _messages.value.map { ChatMessage(role = it.role, content = it.content) }.toMutableList()
@@ -246,6 +264,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         memories: List<Memory>,
         persona: Persona? = null,
         toolResults: List<String> = emptyList(),
+        appliedActionLines: List<String> = emptyList(),
         temporaryResponseFormat: String? = null
     ): String {
         val base = MemoryEngine.buildRecallPrompt(
@@ -267,6 +286,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 appendLine()
                 appendLine("[Tool Results]")
                 toolResults.forEach { appendLine("- $it") }
+            }
+            if (appliedActionLines.isNotEmpty()) {
+                appendLine()
+                appendLine("[Applied Actions]")
+                appendLine("These actions have already been applied to local app state. Treat them as observations, not suggestions.")
+                appliedActionLines.forEach { appendLine("- $it") }
             }
         }
     }

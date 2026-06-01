@@ -38,6 +38,11 @@ class AgentToolExecutorTest {
         assertEquals("活泼", result.persona.tone)
         assertEquals("噜噜", personaStore.saved.single().name)
         assertTrue(result.toolResults.single().contains("update_persona"))
+        assertEquals(1, result.appliedActions.size)
+        assertEquals(AppliedAgentActionType.PERSONA_UPDATED, result.appliedActions.single().type)
+        assertEquals("牛牛", result.appliedActions.single().before)
+        assertEquals("噜噜", result.appliedActions.single().after)
+        assertEquals("好的，已经改名为「噜噜」。", result.appliedActions.single().userVisibleText)
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.memorychat.app.domain.engine.MemoryExtractionSaver
 import com.memorychat.app.domain.engine.MemoryExtractionStore
 import com.memorychat.app.domain.engine.PersonaInstruction
 import com.memorychat.app.domain.engine.PersonaInstructionDetector
+import com.memorychat.app.domain.engine.PersonaUpdateAcknowledger
 import com.memorychat.app.domain.model.ChatMessage
 import com.memorychat.app.domain.model.Conversation
 import com.memorychat.app.domain.model.MemoryCandidate
@@ -21,6 +22,7 @@ interface AgentPersonaStore {
 data class AgentToolExecutionResult(
     val persona: Persona,
     val toolResults: List<String> = emptyList(),
+    val appliedActions: List<AppliedAgentAction> = emptyList(),
     val memoryWritten: Boolean = false
 )
 
@@ -37,6 +39,7 @@ class AgentToolExecutor(
     ): AgentToolExecutionResult {
         var currentPersona = persona
         val results = mutableListOf<String>()
+        val appliedActions = mutableListOf<AppliedAgentAction>()
         var memoryWritten = false
         decision.toolCalls.forEach { call ->
             try {
@@ -49,6 +52,17 @@ class AgentToolExecutor(
                         if (instruction.isEmpty()) return@forEach
                         val updated = PersonaInstructionDetector.apply(currentPersona, instruction)
                         personaStore.savePersona(updated)
+                        instruction.name?.takeIf { it.isNotBlank() && it != currentPersona.name }?.let { newName ->
+                            appliedActions += AppliedAgentAction(
+                                type = AppliedAgentActionType.PERSONA_UPDATED,
+                                target = "persona.name",
+                                before = currentPersona.name,
+                                after = newName,
+                                userVisibleText = PersonaUpdateAcknowledger.acknowledge(
+                                    PersonaInstruction(name = newName)
+                                )
+                            )
+                        }
                         currentPersona = updated
                         results += "[tool:update_persona] applied"
                     }
@@ -100,7 +114,7 @@ class AgentToolExecutor(
                 results += "[tool:${call.name}] failed"
             }
         }
-        return AgentToolExecutionResult(currentPersona, results, memoryWritten)
+        return AgentToolExecutionResult(currentPersona, results, appliedActions, memoryWritten)
     }
 
     private suspend fun saveMemory(
