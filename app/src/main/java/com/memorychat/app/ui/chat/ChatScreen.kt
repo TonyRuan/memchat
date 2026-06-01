@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.memorychat.app.domain.model.ChatMessage
+import com.memorychat.app.domain.model.ToolTrace
 import com.memorychat.app.ui.components.MemoryExtractionIndicator
 import com.memorychat.app.ui.markdown.MarkdownText
 import kotlinx.coroutines.launch
@@ -35,6 +36,8 @@ fun ChatScreen(
     val messages by viewModel.messages.collectAsState()
     val isGenerating by viewModel.isGenerating.collectAsState()
     val streamingContent by viewModel.streamingContent.collectAsState()
+    val activeToolTrace by viewModel.activeToolTrace.collectAsState()
+    val completedToolTraces by viewModel.completedToolTraces.collectAsState()
     val conversation by viewModel.conversation.collectAsState()
     val memoryExtractionStatus by viewModel.memoryExtractionStatus.collectAsState()
     val activeExtractionConversations by viewModel.activeMemoryExtractionConversationIds.collectAsState()
@@ -178,6 +181,7 @@ fun ChatScreen(
                 items(messages, key = { it.id }) { msg ->
                     MessageBubble(
                         message = msg,
+                        toolTrace = completedToolTraces[msg.id],
                         onLongClick = { deleteTarget = msg }
                     )
                 }
@@ -186,6 +190,7 @@ fun ChatScreen(
                     item {
                         MessageBubble(
                             message = ChatMessage(conversationId = conversationId, role = "assistant", content = streamingContent),
+                            toolTrace = activeToolTrace,
                             onLongClick = {}
                         )
                     }
@@ -193,15 +198,11 @@ fun ChatScreen(
 
                 if (isGenerating && streamingContent.isEmpty()) {
                     item {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                            Box(
-                                modifier = Modifier.clip(RoundedCornerShape(12.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .padding(12.dp)
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            }
-                        }
+                        MessageBubble(
+                            message = ChatMessage(conversationId = conversationId, role = "assistant", content = ""),
+                            toolTrace = activeToolTrace,
+                            onLongClick = {}
+                        )
                     }
                 }
             }
@@ -242,14 +243,14 @@ fun ChatScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MessageBubble(message: ChatMessage, onLongClick: () -> Unit) {
+fun MessageBubble(message: ChatMessage, toolTrace: ToolTrace? = null, onLongClick: () -> Unit) {
     val isUser = message.role == "user"
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .widthIn(max = 300.dp)
                 .clip(RoundedCornerShape(12.dp))
@@ -268,9 +269,12 @@ fun MessageBubble(message: ChatMessage, onLongClick: () -> Unit) {
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             }
+            if (!isUser && toolTrace != null) {
+                ToolTraceView(trace = toolTrace)
+            }
             if (isUser) {
                 Text(text = message.content, color = textColor)
-            } else {
+            } else if (message.content.isNotBlank()) {
                 MarkdownText(markdown = message.content, color = textColor)
             }
         }

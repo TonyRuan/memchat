@@ -35,6 +35,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _streamingContent = MutableStateFlow("")
     val streamingContent: StateFlow<String> = _streamingContent
 
+    private val _activeToolTrace = MutableStateFlow<ToolTrace?>(null)
+    val activeToolTrace: StateFlow<ToolTrace?> = _activeToolTrace
+
+    private val _completedToolTraces = MutableStateFlow<Map<String, ToolTrace>>(emptyMap())
+    val completedToolTraces: StateFlow<Map<String, ToolTrace>> = _completedToolTraces
+
     private val _conversation = MutableStateFlow<Conversation?>(null)
     val conversation: StateFlow<Conversation?> = _conversation
 
@@ -89,6 +95,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         AppLogger.i("ChatVM", "Sending: ${content.take(50)}")
         _isGenerating.value = true
         _streamingContent.value = ""
+        _activeToolTrace.value = ToolTrace.thinking()
 
         viewModelScope.launch {
             try {
@@ -102,6 +109,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _messages.value = _messages.value + userMsg
 
                 val decision = AgentDecisionEngine(provider, model).decide(content, loadedPersona)
+                _activeToolTrace.value = runningTraceForDecision(decision, content)
                 val toolExecution = executeAgentTools(decision, loadedPersona, activeConv, listOf(userMsg))
                 val persona = toolExecution.persona
                 AppLogger.i("ChatVM", "Agent tools: calls=${decision.toolCalls.size}, results=${toolExecution.toolResults.size}")
@@ -111,6 +119,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     val recall = memoryEngine?.recall(content, activeMemories, persona)
                     _lastRecallResult.value = recall
                     AppLogger.i("ChatVM", "Recall: scene=${recall?.scene}, count=${recall?.memories?.size}")
+                    if (_activeToolTrace.value == null && !recall?.memories.isNullOrEmpty()) {
+                        _activeToolTrace.value = ToolTrace.memoryRecall(recall!!.memories.size)
+                    }
                     recall?.memories ?: emptyList()
                 } else emptyList()
 
@@ -147,6 +158,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                     val assistantMsg = ChatMessage(conversationId = activeConv.id, role = "assistant", content = finalContent)
                                     app.conversationRepo.saveMessage(assistantMsg)
                                     _messages.value = _messages.value + assistantMsg
+                                    completedTraceForTurn()?.let { trace ->
+                                        _completedToolTraces.value = _completedToolTraces.value + (assistantMsg.id to trace)
+                                    }
+                                    _activeToolTrace.value = null
                                     AppLogger.d("ChatVM", "Message saved to DB and added to list")
                                     if (toolExecution.memoryWritten) {
                                         saveExtractionWatermark(activeConv.id, listOf(userMsg, assistantMsg))
@@ -156,6 +171,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                     }
                                 }
                             } else {
+                                if (chunk.searchCitations.isNotEmpty() || chunk.webSearchUsage != null) {
+                                    _activeToolTrace.value = ToolTrace.search(
+                                        status = ToolTraceStatus.RUNNING,
+                                        query = content,
+                                        usage = chunk.webSearchUsage ?: _activeToolTrace.value?.usage,
+                                        citations = mergeCitations(_activeToolTrace.value?.citations.orEmpty(), chunk.searchCitations)
+                                    )
+                                }
                                 accumulated += chunk.content
                                 _streamingContent.value = accumulated
                             }
@@ -177,6 +200,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                 .persistAssistantError(activeConv.id, e.message)
                             _messages.value = _messages.value + errorMsg
                         }
+                        _activeToolTrace.value = null
                     } finally {
                         sendGate.finish()
                         _isGenerating.value = false
@@ -190,6 +214,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val errorMsg = ChatTurnErrorPersister(conversationMessageStore())
                     .persistAssistantError(conv.id, e.message)
                 _messages.value = _messages.value + errorMsg
+                _activeToolTrace.value = null
                 finishGeneration()
             }
         }
@@ -198,6 +223,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun finishGeneration() {
         sendGate.finish()
         _streamingContent.value = ""
+        _activeToolTrace.value = null
         _isGenerating.value = false
     }
 
@@ -263,6 +289,39 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         conversation = conv,
         sourceMessages = sourceMessages
     )
+
+    private fun runningTraceForDecision(decision: AgentDecision, userText: String): ToolTrace? {
+        if (decision.usesWebSearch()) {
+            return ToolTrace.search(ToolTraceStatus.RUNNING, query = userText)
+        }
+        val firstTool = decision.toolCalls.firstOrNull() ?: return null
+        return when (firstTool.name) {
+            "update_persona" -> ToolTrace.personaUpdate(ToolTraceStatus.RUNNING)
+            "save_memory", "set_user_addressing_preference" -> ToolTrace.memoryWrite(1)
+            "search_docs" -> ToolTrace.docSearch(ToolTraceStatus.RUNNING, query = firstTool.arguments["query"] as? String)
+            "recall_memory" -> null
+            else -> null
+        }
+    }
+
+    private fun completedTraceForTurn(): ToolTrace? {
+        val trace = _activeToolTrace.value ?: return null
+        return if (trace.status == ToolTraceStatus.COMPLETED) trace else trace.complete()
+    }
+
+    private fun mergeCitations(
+        existing: List<SearchCitation>,
+        incoming: List<SearchCitation>
+    ): List<SearchCitation> {
+        if (incoming.isEmpty()) return existing
+        val seen = existing.mapNotNull { it.url ?: it.title }.toMutableSet()
+        val merged = existing.toMutableList()
+        incoming.forEach { citation ->
+            val key = citation.url ?: citation.title
+            if (seen.add(key)) merged += citation
+        }
+        return merged
+    }
 
     private suspend fun ensureConversationPersona(conv: Conversation): Pair<Conversation, Persona> {
         conv.personaId?.let { personaId ->

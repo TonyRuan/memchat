@@ -73,6 +73,60 @@ class OpenAICompatibleProviderTest {
     }
 
     @Test
+    fun completeParsesMimoSearchAnnotationsAndUsage() = runTest {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """
+                    {
+                      "choices": [
+                        {
+                          "message": {
+                            "content": "根据搜索结果，深圳周末有雨。",
+                            "annotations": [
+                              {
+                                "type": "url_citation",
+                                "url": "https://example.com/weather",
+                                "title": "深圳天气预报",
+                                "summary": "深圳周末降雨",
+                                "site_name": "天气网",
+                                "publish_time": "2026-06-01T08:00:00+08:00"
+                              }
+                            ]
+                          }
+                        }
+                      ],
+                      "usage": {
+                        "web_search_usage": {
+                          "tool_usage": 3,
+                          "page_usage": 18
+                        }
+                      }
+                    }
+                    """.trimIndent()
+                )
+            )
+            server.start()
+            val provider = OpenAICompatibleProvider("key", server.url("/v1").toString().trimEnd('/'), "model")
+
+            val response = provider.complete(
+                ChatRequest(
+                    messages = listOf(ChatMessage(role = "user", content = "深圳这周末会下雨吗")),
+                    model = "model",
+                    stream = false,
+                    enableWebSearch = true
+                )
+            )
+
+            assertEquals("根据搜索结果，深圳周末有雨。", response.content)
+            assertEquals(3, response.webSearchUsage?.keywordCount)
+            assertEquals(18, response.webSearchUsage?.pageCount)
+            assertEquals("深圳天气预报", response.searchCitations.single().title)
+            assertEquals("天气网", response.searchCitations.single().siteName)
+        }
+    }
+
+    @Test
     fun completeDoesNotRunFallbackSearchWhenMimoReturnsWebSearchToolCall() = runTest {
         MockWebServer().use { server ->
             server.enqueue(
@@ -155,6 +209,44 @@ class OpenAICompatibleProviderTest {
             assertTrue(body.contains(""""force_search":true"""))
             assertTrue(body.contains(""""max_keyword":3"""))
             assertTrue(body.contains(""""tool_choice":"auto""""))
+        }
+    }
+
+    @Test
+    fun streamEmitsMimoSearchAnnotationsBeforeContent() = runTest {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse()
+                    .setHeader("Content-Type", "text/event-stream")
+                    .setBody(
+                        """
+                        data: {"choices":[{"delta":{"annotations":[{"type":"url_citation","title":"深圳天气","url":"https://example.com","site_name":"天气网"}]}}],"usage":{"web_search_usage":{"tool_usage":2,"page_usage":5}}}
+
+                        data: {"choices":[{"delta":{"content":"有雨"}}]}
+
+                        data: [DONE]
+
+                        """.trimIndent()
+                    )
+            )
+            server.start()
+            val provider = OpenAICompatibleProvider("key", server.url("/v1").toString().trimEnd('/'), "model")
+
+            val chunks = provider.streamChat(
+                ChatRequest(
+                    messages = listOf(ChatMessage(role = "user", content = "深圳周末天气")),
+                    model = "model",
+                    stream = true,
+                    enableWebSearch = true
+                )
+            ).toList()
+
+            val metadataChunk = chunks.first()
+            assertEquals("", metadataChunk.content)
+            assertEquals(2, metadataChunk.webSearchUsage?.keywordCount)
+            assertEquals(5, metadataChunk.webSearchUsage?.pageCount)
+            assertEquals("深圳天气", metadataChunk.searchCitations.single().title)
+            assertEquals("有雨", chunks[1].content)
         }
     }
 }

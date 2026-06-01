@@ -70,12 +70,16 @@ data class ChatRequest(
 
 data class ChatChunk(
     val content: String,
-    val done: Boolean = false
+    val done: Boolean = false,
+    val searchCitations: List<SearchCitation> = emptyList(),
+    val webSearchUsage: WebSearchUsage? = null
 )
 
 data class ChatResponse(
     val content: String,
-    val usage: TokenUsage? = null
+    val usage: TokenUsage? = null,
+    val searchCitations: List<SearchCitation> = emptyList(),
+    val webSearchUsage: WebSearchUsage? = null
 )
 
 data class TokenUsage(

@@ -1,5 +1,27 @@
 # MemoryChat Development Log
 
+## v1.0.61 (2026-06-01)
+
+### Changes
+- Added chat tool traces so tool execution can show an animated in-bubble status and a completed collapsible trace
+- Added conservative search summaries that display real MiMo search metadata when `annotations` / `usage.web_search_usage` are present
+- Added provider parsing for MiMo search citations and web search usage in streaming and non-streaming responses
+- Updated the emulator smoke script default APK path to v1.0.61
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.model.ToolTraceTest" --tests "com.memorychat.app.domain.provider.OpenAICompatibleProviderTest"`
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+- PASS: physical-device UI smoke on `10AE2P094M002SL`
+  - Installed v1.0.61 and sent `Will it rain in Shenzhen this weekend` through the real Chat UI
+  - Logcat showed `Agent tools: calls=1, results=1` and `Stream request: model=mimo-v2.5, webSearch=true`
+  - UI showed a collapsible search trace such as `参考 6 篇资料`, and the assistant text rendered below it without overlap
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.61-debug.apk`
+
+---
+
 ## v1.0.60 (2026-06-01)
 
 ### Changes

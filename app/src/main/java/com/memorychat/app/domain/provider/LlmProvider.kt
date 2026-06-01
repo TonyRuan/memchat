@@ -106,17 +106,31 @@ class OpenAICompatibleProvider(
                 try {
                     try {
                         val json = JsonParser.parseString(data).asJsonObject
+                        val webSearchUsage = parseWebSearchUsage(json)
                         val choices = json.getAsJsonArray("choices")
                         if (choices != null && choices.size() > 0) {
                             val choice = choices[0].asJsonObject
                             val delta = choice.getAsJsonObject("delta")
-                            if (delta != null && delta.has("content")) {
-                                val contentElement = delta.get("content")
-                                if (contentElement != null && !contentElement.isJsonNull) {
-                                    val content = contentElement.asString
-                                    if (!content.isNullOrEmpty()) {
-                                        chunkCount++
-                                        emit(ChatChunk(content = content, done = false))
+                            if (delta != null) {
+                                val searchCitations = parseSearchCitations(delta)
+                                if (searchCitations.isNotEmpty() || webSearchUsage != null) {
+                                    emit(
+                                        ChatChunk(
+                                            content = "",
+                                            done = false,
+                                            searchCitations = searchCitations,
+                                            webSearchUsage = webSearchUsage
+                                        )
+                                    )
+                                }
+                                if (delta.has("content")) {
+                                    val contentElement = delta.get("content")
+                                    if (contentElement != null && !contentElement.isJsonNull) {
+                                        val content = contentElement.asString
+                                        if (!content.isNullOrEmpty()) {
+                                            chunkCount++
+                                            emit(ChatChunk(content = content, done = false))
+                                        }
                                     }
                                 }
                             }
@@ -181,7 +195,11 @@ class OpenAICompatibleProvider(
                         if (content.isBlank() && request.enableWebSearch) {
                             AppLogger.w("LlmProvider", "Web search returned empty non-streaming content")
                         }
-                        return ChatResponse(content = content)
+                        return ChatResponse(
+                            content = content,
+                            searchCitations = parseSearchCitations(message),
+                            webSearchUsage = parseWebSearchUsage(json)
+                        )
                     }
                 }
                 AppLogger.w("LlmProvider", "Unexpected response format: ${responseBody.take(200)}")
@@ -193,6 +211,55 @@ class OpenAICompatibleProvider(
         } catch (e: Exception) {
             throw e
         }
+    }
+
+    private fun parseSearchCitations(container: JsonObject?): List<SearchCitation> {
+        val annotations = container?.getAsJsonArrayOrNull("annotations") ?: return emptyList()
+        return annotations.mapNotNull { element ->
+            val obj = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+            if (obj.getStringOrNull("type") != "url_citation") return@mapNotNull null
+            val title = obj.getStringOrNull("title") ?: obj.getStringOrNull("url") ?: return@mapNotNull null
+            SearchCitation(
+                title = title,
+                url = obj.getStringOrNull("url"),
+                siteName = obj.getStringOrNull("site_name") ?: obj.getStringOrNull("siteName"),
+                summary = obj.getStringOrNull("summary"),
+                publishTime = obj.getStringOrNull("publish_time") ?: obj.getStringOrNull("publishTime")
+            )
+        }
+    }
+
+    private fun parseWebSearchUsage(root: JsonObject): WebSearchUsage? {
+        val usage = root.getAsJsonObjectOrNull("usage")
+        val webSearchUsage = usage?.getAsJsonObjectOrNull("web_search_usage")
+            ?: root.getAsJsonObjectOrNull("web_search_usage")
+            ?: return null
+        val keywordCount = webSearchUsage.getIntOrNull("tool_usage")
+            ?: webSearchUsage.getIntOrNull("keyword_usage")
+            ?: webSearchUsage.getIntOrNull("keyword_count")
+        val pageCount = webSearchUsage.getIntOrNull("page_usage")
+            ?: webSearchUsage.getIntOrNull("page_count")
+        return if (keywordCount == null && pageCount == null) null else WebSearchUsage(keywordCount, pageCount)
+    }
+
+    private fun JsonObject.getStringOrNull(name: String): String? {
+        val value = get(name) ?: return null
+        return if (value.isJsonNull) null else value.asString
+    }
+
+    private fun JsonObject.getIntOrNull(name: String): Int? {
+        val value = get(name) ?: return null
+        return if (value.isJsonNull) null else runCatching { value.asInt }.getOrNull()
+    }
+
+    private fun JsonObject.getAsJsonObjectOrNull(name: String): JsonObject? {
+        val value = get(name) ?: return null
+        return if (value.isJsonObject) value.asJsonObject else null
+    }
+
+    private fun JsonObject.getAsJsonArrayOrNull(name: String): com.google.gson.JsonArray? {
+        val value = get(name) ?: return null
+        return if (value.isJsonArray) value.asJsonArray else null
     }
 
 }
