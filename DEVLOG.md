@@ -1,5 +1,21 @@
 # MemoryChat Development Log
 
+## Docs (2026-06-05)
+
+### Changes
+- Added `docs/README.md` as the documentation index for architecture, audits, and implementation plans
+- Updated `docs/architecture/agent-tool-runtime.md` to reflect the current static skill/tool runtime, implemented tools, web search routing, applied actions, and dynamic skill roadmap
+- Marked completed Agent runtime and chat tool trace implementation plans as implemented so future agents do not treat them as pending work
+
+### Verification
+- PASS: `git diff --check`
+- Documentation-only change; app version and APK were not updated
+
+### APK
+- Not applicable
+
+---
+
 ## v1.0.63 (2026-06-01)
 
 ### Changes
