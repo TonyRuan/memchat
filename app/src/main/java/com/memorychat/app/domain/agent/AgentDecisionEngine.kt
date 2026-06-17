@@ -87,6 +87,7 @@ JSON schema:
     {"name": "save_memory", "arguments": {"type": "profile|preference|project|summary", "content": "...", "importance": 3, "confidence": 0.8}},
     {"name": "set_user_addressing_preference", "arguments": {"addressing": "..."}},
     {"name": "search_docs", "arguments": {"query": "..."}},
+    {"name": "recall_memory", "arguments": {"query": "...", "types": ["profile|preference|project|summary"], "limit": 5}},
     {"name": "web_search", "arguments": {"query": "..."}},
     {"name": "get_current_time", "arguments": {}}
   ],

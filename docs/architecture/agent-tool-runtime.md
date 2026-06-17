@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-截至 `v1.0.63`，MemoryChat 已有一套轻量的 Agent 工具运行时。它不是运行时动态安装的 skill 系统，而是编译进 APK 的静态工具集合：
+截至 `v1.0.67`，MemoryChat 已有一套轻量的 Agent 工具运行时。它不是运行时动态安装的 skill 系统，而是编译进 APK 的静态工具集合：
 
 - 能力清单写在 `AgentDecisionEngine` 的路由 prompt 里。
 - 允许调用的工具名写在 `AgentDecisionEngine.allowedTools` 白名单里。
@@ -43,6 +43,9 @@ MemoryChat 第一阶段不做复杂多 Agent，而是做本地 Runtime：LLM 负
 - `set_user_addressing_preference`
   - 保存“助手如何称呼用户”的偏好。
   - 不改助手 Persona。
+- `recall_memory`
+  - 按模型给出的 `query`、可选 `types` 和 `limit` 读取 active 长期记忆。
+  - 复用 `MemoryRecallEngine` 的 query 相关性排序和 reason 生成，结果只回填当前回答上下文。
 
 ### 已路由工具
 
@@ -56,9 +59,6 @@ MemoryChat 第一阶段不做复杂多 Agent，而是做本地 Runtime：LLM 负
 - `search_docs`
   - 当前只返回预留结果文本。
   - 后续可接本地 PRD、帮助文档、skill 文档索引。
-- `recall_memory`
-  - 当前由正常记忆召回链路处理。
-  - 后续可扩展为显式 memory query 工具。
 
 ## 决策 JSON
 
@@ -149,5 +149,6 @@ AgentFinalAnswerPolicy 判断是否可直接确认
 - “你叫真机露露” 更新 Persona。
 - “你叫我真机大王吧” 不改 Persona，只写用户称呼偏好。
 - “记住真机防重复编号是 AGENT-1056” 只落一条长期记忆。
+- `recall_memory` 可按 query 返回具体长期记忆内容和召回原因。
 - 联网搜索请求可触发 provider 的 web search，并在聊天页显示工具轨迹。
 - 纯 Persona 更新可跳过最终模型调用，直接返回确定性确认语。

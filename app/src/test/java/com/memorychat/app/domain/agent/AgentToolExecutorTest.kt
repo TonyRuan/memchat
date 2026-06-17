@@ -150,6 +150,46 @@ class AgentToolExecutorTest {
         assertTrue(personaStore.saved.isEmpty())
     }
 
+    @Test
+    fun recallMemoryToolReturnsRelevantActiveMemories() = runTest {
+        val memoryStore = FakeMemoryStore()
+        memoryStore.active += listOf(
+            Memory(
+                id = "generic-project",
+                type = MemoryType.PROJECT,
+                content = "MemoryChat 是 Android Kotlin Jetpack Compose 聊天应用",
+                importance = 5
+            ),
+            Memory(
+                id = "fault-detail",
+                type = MemoryType.PROJECT,
+                content = "电机故障详情通过 INFO22 字段展示，调试时要优先核对原始帧",
+                importance = 2
+            )
+        )
+        val executor = AgentToolExecutor(FakePersonaStore(), memoryStore) { 1_717_171_717_000L }
+
+        val result = executor.execute(
+            decision = AgentDecision(
+                toolCalls = listOf(
+                    AgentToolCall(
+                        name = "recall_memory",
+                        arguments = mapOf("query" to "电机故障详情 INFO22", "limit" to 1)
+                    )
+                )
+            ),
+            persona = Persona(name = "牛牛"),
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            sourceMessages = listOf(ChatMessage(id = "msg-1", conversationId = "conv-1", role = "user", content = "之前电机故障详情怎么看？"))
+        )
+
+        assertEquals(false, result.memoryWritten)
+        assertTrue(result.toolResults.single().contains("[tool:recall_memory]"))
+        assertTrue(result.toolResults.single().contains("fault-detail"))
+        assertTrue(result.toolResults.single().contains("INFO22"))
+        assertTrue(result.toolResults.single().contains("query match"))
+    }
+
     private class FakePersonaStore : AgentPersonaStore {
         val saved = mutableListOf<Persona>()
         override suspend fun savePersona(persona: Persona) {

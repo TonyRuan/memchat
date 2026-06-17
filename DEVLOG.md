@@ -1,5 +1,23 @@
 # MemoryChat Development Log
 
+## v1.0.67 (2026-06-17)
+
+### Changes
+- Added `MemoryRecallEngine` so long-term memory recall ranks query matches ahead of generic scene/type fallback memories while preserving existing scene caps
+- Implemented the `recall_memory` agent tool with query/type/limit arguments and tool-result context containing matched memory ids, content, and recall reasons
+- Updated Agent runtime documentation and the emulator smoke script default APK path to v1.0.67
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.MemoryEngineTest.recallRanksExactQueryMatchesAheadOfGenericHighImportanceMemories" --tests "com.memorychat.app.domain.agent.AgentToolExecutorTest.recallMemoryToolReturnsRelevantActiveMemories"` (RED failed before implementation, then passed)
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.MemoryEngineTest" --tests "com.memorychat.app.domain.agent.AgentToolExecutorTest" --tests "com.memorychat.app.domain.agent.AgentDecisionEngineTest" --tests "com.memorychat.app.domain.agent.AgentFinalAnswerPolicyTest"`
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.67-debug.apk`
+
+---
+
 ## v1.0.66 (2026-06-17)
 
 ### Changes

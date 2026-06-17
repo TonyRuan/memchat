@@ -74,6 +74,40 @@ class MemoryEngineTest {
     }
 
     @Test
+    fun recallRanksExactQueryMatchesAheadOfGenericHighImportanceMemories() {
+        val memories = listOf(
+            memory(
+                "generic-project",
+                MemoryType.PROJECT,
+                "MemoryChat 是 Android Kotlin Jetpack Compose 聊天应用",
+                importance = 5
+            ),
+            memory(
+                "fault-detail",
+                MemoryType.PROJECT,
+                "电机故障详情通过 INFO22 字段展示，调试时要优先核对原始帧",
+                importance = 2
+            ),
+            memory(
+                "preference-1",
+                MemoryType.PREFERENCE,
+                "回答要直接说明真实协议字段",
+                importance = 4
+            )
+        )
+
+        val result = engine.recall(
+            userMessage = "这个项目里电机故障详情的 INFO22 要怎么看？",
+            allActiveMemories = memories,
+            persona = null
+        )
+
+        assertEquals("project", result.scene)
+        assertEquals("fault-detail", result.memories.first().id)
+        assertTrue(result.reasons.getValue("fault-detail").contains("query match"))
+    }
+
+    @Test
     fun recallDeduplicatesAndCapsResults() {
         val duplicate = memory("same-id", MemoryType.PROFILE, "用户偏好中文")
         val memories = listOf(duplicate, duplicate.copy(content = "重复内容")) +
@@ -149,12 +183,18 @@ class MemoryEngineTest {
         assertTrue(prompt.contains("Use updates when new information refines or expands an existing memory"))
     }
 
-    private fun memory(id: String, type: MemoryType, content: String): Memory {
+    private fun memory(
+        id: String,
+        type: MemoryType,
+        content: String,
+        importance: Int = 3
+    ): Memory {
         return Memory(
             id = id,
             type = type,
             content = content,
-            status = MemoryStatus.ACTIVE
+            status = MemoryStatus.ACTIVE,
+            importance = importance
         )
     }
 

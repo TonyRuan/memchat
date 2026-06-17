@@ -2,6 +2,7 @@ package com.memorychat.app.domain.agent
 
 import com.memorychat.app.domain.engine.MemoryExtractionSaver
 import com.memorychat.app.domain.engine.MemoryExtractionStore
+import com.memorychat.app.domain.engine.MemoryRecallEngine
 import com.memorychat.app.domain.engine.PersonaInstruction
 import com.memorychat.app.domain.engine.PersonaInstructionDetector
 import com.memorychat.app.domain.engine.PersonaUpdateAcknowledger
@@ -9,6 +10,8 @@ import com.memorychat.app.domain.model.ChatMessage
 import com.memorychat.app.domain.model.Conversation
 import com.memorychat.app.domain.model.MemoryCandidate
 import com.memorychat.app.domain.model.MemoryExtractionResult
+import com.memorychat.app.domain.model.MemoryQuery
+import com.memorychat.app.domain.model.MemoryRecallResult
 import com.memorychat.app.domain.model.MemoryStatus
 import com.memorychat.app.domain.model.MemoryType
 import com.memorychat.app.domain.model.Persona
@@ -29,6 +32,7 @@ data class AgentToolExecutionResult(
 class AgentToolExecutor(
     private val personaStore: AgentPersonaStore,
     private val memoryStore: MemoryExtractionStore,
+    private val memoryRecallEngine: MemoryRecallEngine = MemoryRecallEngine(),
     private val nowMillis: () -> Long = { System.currentTimeMillis() }
 ) {
     suspend fun execute(
@@ -114,7 +118,19 @@ class AgentToolExecutor(
                         }
                     }
                     "recall_memory" -> {
-                        results += "[tool:recall_memory] handled by normal memory recall"
+                        val query = call.stringArg("query")?.trim()
+                            ?.takeIf { it.isNotBlank() }
+                            ?: sourceMessages.lastOrNull { it.role == "user" }?.content.orEmpty()
+                        val recall = memoryRecallEngine.recall(
+                            query = MemoryQuery(
+                                text = query,
+                                types = call.memoryTypesArg() ?: MemoryType.values().toList(),
+                                limit = call.limitArg()
+                            ),
+                            allActiveMemories = memoryStore.getActiveMemories(),
+                            persona = currentPersona
+                        )
+                        results += formatRecallMemoryResult(query, recall)
                     }
                 }
             } catch (e: Exception) {
@@ -136,6 +152,19 @@ class AgentToolExecutor(
                 messages = sourceMessages,
                 result = MemoryExtractionResult(newMemories = listOf(candidate))
             )
+    }
+
+    private fun formatRecallMemoryResult(query: String, recall: MemoryRecallResult): String {
+        if (recall.memories.isEmpty()) {
+            return "[tool:recall_memory] query=\"$query\" matched=0"
+        }
+        return buildString {
+            append("[tool:recall_memory] query=\"$query\" scene=${recall.scene} matched=${recall.memories.size}")
+            recall.memories.forEach { memory ->
+                appendLine()
+                append("- id=${memory.id} type=${memory.type.name} reason=${recall.reasons[memory.id].orEmpty()} content=${memory.content}")
+            }
+        }
     }
 
     private fun AgentToolCall.toPersonaInstruction(): PersonaInstruction {
@@ -161,13 +190,27 @@ class AgentToolExecutor(
         )
     }
 
+    private fun AgentToolCall.memoryTypesArg(): List<MemoryType>? {
+        val types = stringListArg("types").mapNotNull { parseMemoryTypeOrNull(it) }
+        return types.takeIf { it.isNotEmpty() }
+    }
+
+    private fun AgentToolCall.limitArg(): Int {
+        val raw = arguments["limit"] as? Number ?: return 5
+        return raw.toInt().coerceIn(1, 8)
+    }
+
     private fun parseMemoryType(raw: String?): MemoryType {
+        return parseMemoryTypeOrNull(raw) ?: MemoryType.SUMMARY
+    }
+
+    private fun parseMemoryTypeOrNull(raw: String?): MemoryType? {
         return when (raw?.lowercase()) {
             "profile" -> MemoryType.PROFILE
             "preference" -> MemoryType.PREFERENCE
             "project" -> MemoryType.PROJECT
             "summary" -> MemoryType.SUMMARY
-            else -> MemoryType.SUMMARY
+            else -> null
         }
     }
 
