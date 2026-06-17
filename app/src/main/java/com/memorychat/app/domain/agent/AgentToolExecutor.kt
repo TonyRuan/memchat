@@ -69,6 +69,10 @@ class AgentToolExecutor(
                     "set_user_addressing_preference" -> {
                         val addressing = call.stringArg("addressing")?.trim().orEmpty()
                         if (addressing.isBlank()) return@forEach
+                        if (!conversation.generateMemory) {
+                            results += "[tool:set_user_addressing_preference] skipped: generate_memory=false"
+                            return@forEach
+                        }
                         saveMemory(
                             conversation = conversation,
                             sourceMessages = sourceMessages,
@@ -85,6 +89,10 @@ class AgentToolExecutor(
                         results += "[tool:set_user_addressing_preference] saved"
                     }
                     "save_memory" -> {
+                        if (!conversation.generateMemory) {
+                            results += "[tool:save_memory] skipped: generate_memory=false"
+                            return@forEach
+                        }
                         call.toMemoryCandidate()?.let { candidate ->
                             saveMemory(conversation, sourceMessages, candidate)
                             memoryWritten = true

@@ -102,6 +102,37 @@ class AgentToolExecutorTest {
     }
 
     @Test
+    fun memoryToolsDoNotWriteWhenGenerateMemoryDisabled() = runTest {
+        val memoryStore = FakeMemoryStore()
+        val executor = AgentToolExecutor(FakePersonaStore(), memoryStore) { 1_717_171_717_000L }
+
+        val result = executor.execute(
+            decision = AgentDecision(
+                toolCalls = listOf(
+                    AgentToolCall(
+                        name = "set_user_addressing_preference",
+                        arguments = mapOf("addressing" to "大王")
+                    ),
+                    AgentToolCall(
+                        name = "save_memory",
+                        arguments = mapOf(
+                            "type" to "project",
+                            "content" to "真机测试的颜色是靛蓝"
+                        )
+                    )
+                )
+            ),
+            persona = Persona(name = "牛牛"),
+            conversation = Conversation(id = "conv-1", title = "测试", generateMemory = false),
+            sourceMessages = listOf(ChatMessage(id = "msg-1", conversationId = "conv-1", role = "user", content = "记住这个"))
+        )
+
+        assertEquals(false, result.memoryWritten)
+        assertTrue(memoryStore.inserted.isEmpty())
+        assertTrue(result.toolResults.all { it.contains("skipped") })
+    }
+
+    @Test
     fun getCurrentTimeReturnsToolResultWithoutStorageWrites() = runTest {
         val personaStore = FakePersonaStore()
         val memoryStore = FakeMemoryStore()

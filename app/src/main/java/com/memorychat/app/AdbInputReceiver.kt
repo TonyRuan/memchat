@@ -22,6 +22,9 @@ import com.memorychat.app.domain.model.Memory
 import com.memorychat.app.domain.model.MemoryRecallResult
 import com.memorychat.app.domain.model.MemoryType
 import com.memorychat.app.domain.provider.OpenAICompatibleProvider
+import com.memorychat.app.domain.engine.ChatContextWindowConfig
+import com.memorychat.app.domain.engine.ChatContextWindowManager
+import com.memorychat.app.domain.engine.LlmConversationContextSummarizer
 import com.memorychat.app.domain.engine.MemoryExtractionSaver
 import com.memorychat.app.domain.engine.MemoryExtractionStore
 import com.memorychat.app.domain.engine.MemoryExtractionTriggerPolicy
@@ -340,13 +343,46 @@ class AdbInputReceiver : BroadcastReceiver() {
             projects = recall.memories.filter { it.type == MemoryType.PROJECT },
             summaries = recall.memories.filter { it.type == MemoryType.SUMMARY }
         )
-        val systemPrompt = decorateSystemPrompt(basePrompt, decision, toolResults, appliedActionLines)
-        val messages = mutableListOf(
-            ChatMessage(role = "system", content = systemPrompt),
-            ChatMessage(role = "user", content = message)
+        val conversationMessages = db.messageDao()
+            .getByConversationId(conversationId)
+            .map { entity ->
+                ChatMessage(
+                    id = entity.id,
+                    conversationId = entity.conversationId,
+                    role = entity.role,
+                    content = entity.content,
+                    createdAt = entity.createdAt
+                )
+            }
+        val contextWindow = ChatContextWindowManager(
+            LlmConversationContextSummarizer(provider, model)
+        ).build(
+            messages = conversationMessages,
+            existingSummary = ds.getConversationRollingSummary(conversationId),
+            summaryWatermark = ds.getConversationRollingSummaryWatermark(conversationId),
+            config = ChatContextWindowConfig(
+                contextWindowTokens = ds.contextWindowTokens.first(),
+                maxCompletionTokens = ds.maxTokens.first(),
+                safetyMarginTokens = ds.safetyMarginTokens.first(),
+                compressionMessageTurnThreshold = ds.compressionMessageTurnThreshold.first()
+            )
         )
+        if (contextWindow.summaryUpdated) {
+            ds.saveConversationRollingSummary(conversationId, contextWindow.summary)
+            ds.saveConversationRollingSummaryWatermark(conversationId, contextWindow.summaryWatermark)
+        }
+
+        val systemPrompt = decorateSystemPrompt(
+            basePrompt = basePrompt,
+            decision = decision,
+            toolResults = toolResults,
+            appliedActionLines = appliedActionLines,
+            rollingSummary = contextWindow.summary
+        )
+        val messages = mutableListOf(ChatMessage(role = "system", content = systemPrompt))
+        messages += contextWindow.messages.map { ChatMessage(role = it.role, content = it.content) }
         Log.i("AdbInput", "  System prompt injected (${systemPrompt.length} chars)")
-        Log.i("AdbInput", "[3/4] Calling API with ${messages.size} messages (recall=${recall.memories.size})")
+        Log.i("AdbInput", "[3/4] Calling API with ${messages.size} messages (recall=${recall.memories.size}, context=${contextWindow.messages.size})")
 
         val response = provider.complete(
             ChatRequest(
@@ -415,11 +451,17 @@ class AdbInputReceiver : BroadcastReceiver() {
         basePrompt: String,
         decision: AgentDecision,
         toolResults: List<String>,
-        appliedActionLines: List<String>
+        appliedActionLines: List<String>,
+        rollingSummary: String = ""
     ): String {
         return buildString {
             append(basePrompt)
             appendLine()
+            if (rollingSummary.isNotBlank()) {
+                appendLine("[Rolling Conversation Summary]")
+                appendLine(rollingSummary)
+                appendLine()
+            }
             appendLine("[Environment]")
             appendLine("Current time: ${Instant.now()}")
             decision.temporaryResponseFormat?.let {

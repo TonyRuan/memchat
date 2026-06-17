@@ -1,5 +1,23 @@
 # MemoryChat Development Log
 
+## v1.0.65 (2026-06-17)
+
+### Changes
+- Added a rolling conversation context window for Chat UI and ADB E2E paths: older messages can be compressed into a persisted per-conversation summary, while model requests keep the summary plus recent turns instead of resending all history
+- Added `generateMemory=false` hard gating for Agent memory tools so `save_memory` and user addressing preferences cannot write memories when memory generation is disabled
+- Added a hard save-layer guard so assistant Persona settings are discarded from long-term memory even if the model returns them as memory candidates
+- Updated the emulator smoke script default APK path to v1.0.65
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.agent.AgentToolExecutorTest" --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest" --tests "com.memorychat.app.domain.engine.ChatContextWindowManagerTest"`
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.65-debug.apk`
+
+---
+
 ## v1.0.64 (2026-06-17)
 
 ### Changes

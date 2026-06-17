@@ -2,8 +2,11 @@ package com.memorychat.app.domain.engine
 
 import com.memorychat.app.domain.model.ChatMessage
 import com.memorychat.app.domain.model.Conversation
+import com.memorychat.app.domain.model.DiscardedInfo
 import com.memorychat.app.domain.model.Memory
+import com.memorychat.app.domain.model.MemoryCandidate
 import com.memorychat.app.domain.model.MemoryExtractionResult
+import com.memorychat.app.domain.model.MemoryStatus
 import com.memorychat.app.domain.model.MemoryType
 import com.memorychat.app.util.AppLogger
 
@@ -59,10 +62,24 @@ class MemoryExtractionSaver(
         existing: List<Memory>
     ): MemoryExtractionResult {
         AppLogger.i("MemoryExtraction", "Extracted: new=${result.newMemories.size}, updates=${result.updates.size}")
+        val discarded = result.discarded.toMutableList()
+        val filteredNewMemories = result.newMemories.filter { candidate ->
+            val content = candidate.content.trim()
+            val isPersonaSetting = isAssistantPersonaSetting(content)
+            if (isPersonaSetting) {
+                discarded += DiscardedInfo(content, "assistant persona setting belongs to Persona, not Memory")
+                AppLogger.i("MemoryExtraction", "Skipping persona setting memory: ${content.take(40)}")
+            }
+            !isPersonaSetting
+        }
+        val filteredResult = result.copy(
+            newMemories = filteredNewMemories,
+            discarded = discarded
+        )
         val fallbackSourceIds = messages.map { it.id }
         val activeMemories = existing.toMutableList()
         val seenNewContents = existing.map { memoryKey(it.type, it.content) }.toMutableSet()
-        result.newMemories.forEach { candidate ->
+        filteredResult.newMemories.forEach { candidate ->
             val content = candidate.content.trim()
             if (content.isBlank()) return@forEach
             if (store.isTombstoned(content, candidate.type)) {
@@ -124,21 +141,22 @@ class MemoryExtractionSaver(
             }
         }
 
-        return result
+        return filteredResult
     }
 
-    private fun explicitMemoryCandidates(messages: List<ChatMessage>): List<com.memorychat.app.domain.model.MemoryCandidate> {
+    private fun explicitMemoryCandidates(messages: List<ChatMessage>): List<MemoryCandidate> {
         return messages
             .filter { it.role == "user" }
             .mapNotNull { ExplicitMemorySignal.extractContent(it.content) }
             .filterNot { isSensitiveMemory(it) }
+            .filterNot { isAssistantPersonaSetting(it) }
             .map {
-                com.memorychat.app.domain.model.MemoryCandidate(
+                MemoryCandidate(
                     type = classifyExplicitMemory(it),
                     content = it,
                     importance = 5,
                     confidence = 0.95f,
-                    statusSuggestion = com.memorychat.app.domain.model.MemoryStatus.ACTIVE,
+                    statusSuggestion = MemoryStatus.ACTIVE,
                     reason = "explicit remember command"
                 )
             }
@@ -164,6 +182,42 @@ class MemoryExtractionSaver(
             .any { lower.contains(it) }
         val credentialToken = Regex("\\b(api|access|refresh|auth|bearer)\\s+token\\b").containsMatchIn(lower)
         return obviousSecret || credentialToken
+    }
+
+    private fun isAssistantPersonaSetting(content: String): Boolean {
+        val compact = content
+            .lowercase()
+            .replace(Regex("[\\s\\p{Punct}，。！？；：“”‘’、（）【】《》]+"), "")
+        if (compact.isBlank()) return false
+        val userIdentityMarkers = listOf("我叫", "我是", "我的名字", "叫我", "称呼我", "喊我")
+        if (userIdentityMarkers.any { compact.contains(it) }) return false
+
+        val assistantIdentityMarkers = listOf(
+            "你的名字",
+            "你名字",
+            "你叫",
+            "你以后叫",
+            "给你改名",
+            "把你改名",
+            "助手名字",
+            "ai名字",
+            "模型名字",
+            "你的人格",
+            "你人设",
+            "你的角色",
+            "你的性格",
+            "你的语气",
+            "persona"
+        )
+        val modelOutputMarkers = listOf(
+            "用户希望ai名字",
+            "用户希望助手名字",
+            "用户希望模型名字",
+            "用户想把ai名字",
+            "用户想把助手名字"
+        )
+        return assistantIdentityMarkers.any { compact.contains(it) } ||
+            modelOutputMarkers.any { compact.contains(it) }
     }
 
     private fun memoryFingerprint(content: String): String {

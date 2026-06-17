@@ -112,6 +112,22 @@ class SettingsDataStore(private val context: Context) {
         val key = longPreferencesKey("memory_extraction_watermark_$conversationId")
         context.dataStore.edit { it[key] = value }
     }
+    suspend fun getConversationRollingSummary(conversationId: String): String {
+        val key = stringPreferencesKey("conversation_rolling_summary_$conversationId")
+        return context.dataStore.data.map { it[key] ?: "" }.first()
+    }
+    suspend fun saveConversationRollingSummary(conversationId: String, value: String) {
+        val key = stringPreferencesKey("conversation_rolling_summary_$conversationId")
+        context.dataStore.edit { it[key] = value }
+    }
+    suspend fun getConversationRollingSummaryWatermark(conversationId: String): Long {
+        val key = longPreferencesKey("conversation_rolling_summary_watermark_$conversationId")
+        return context.dataStore.data.map { it[key] ?: 0L }.first()
+    }
+    suspend fun saveConversationRollingSummaryWatermark(conversationId: String, value: Long) {
+        val key = longPreferencesKey("conversation_rolling_summary_watermark_$conversationId")
+        context.dataStore.edit { it[key] = value }
+    }
 
     // API Key save uses EncryptedSharedPreferences
     suspend fun saveApiKey(value: String) {

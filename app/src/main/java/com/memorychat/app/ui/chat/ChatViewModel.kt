@@ -12,7 +12,10 @@ import com.memorychat.app.domain.agent.AgentToolExecutor
 import com.memorychat.app.domain.model.*
 import com.memorychat.app.domain.provider.OpenAICompatibleProvider
 import com.memorychat.app.domain.engine.ChatTurnErrorPersister
+import com.memorychat.app.domain.engine.ChatContextWindowConfig
+import com.memorychat.app.domain.engine.ChatContextWindowManager
 import com.memorychat.app.domain.engine.ConversationMessageStore
+import com.memorychat.app.domain.engine.LlmConversationContextSummarizer
 import com.memorychat.app.domain.engine.MemoryExtractionSaver
 import com.memorychat.app.domain.engine.MemoryExtractionStore
 import com.memorychat.app.domain.engine.MemoryExtractionTrigger
@@ -144,19 +147,43 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     recall?.memories ?: emptyList()
                 } else emptyList()
 
+                val contextWindow = ChatContextWindowManager(
+                    LlmConversationContextSummarizer(provider, model)
+                ).build(
+                    messages = _messages.value,
+                    existingSummary = app.settingsDataStore.getConversationRollingSummary(activeConv.id),
+                    summaryWatermark = app.settingsDataStore.getConversationRollingSummaryWatermark(activeConv.id),
+                    config = ChatContextWindowConfig(
+                        contextWindowTokens = app.settingsDataStore.contextWindowTokens.first(),
+                        maxCompletionTokens = app.settingsDataStore.maxTokens.first(),
+                        safetyMarginTokens = app.settingsDataStore.safetyMarginTokens.first(),
+                        compressionMessageTurnThreshold = app.settingsDataStore.compressionMessageTurnThreshold.first()
+                    )
+                )
+                if (contextWindow.summaryUpdated) {
+                    app.settingsDataStore.saveConversationRollingSummary(activeConv.id, contextWindow.summary)
+                    app.settingsDataStore.saveConversationRollingSummaryWatermark(activeConv.id, contextWindow.summaryWatermark)
+                }
+
                 val systemPrompt = buildSystemPrompt(
                     memories = memories,
                     persona = persona,
                     toolResults = toolExecution.toolResults,
                     appliedActionLines = finalAnswerDecision.appliedActionLines,
-                    temporaryResponseFormat = decision.temporaryResponseFormat
+                    temporaryResponseFormat = decision.temporaryResponseFormat,
+                    rollingSummary = contextWindow.summary
                 )
-                val allMessages = _messages.value.map { ChatMessage(role = it.role, content = it.content) }.toMutableList()
+                val allMessages = contextWindow.messages
+                    .map { ChatMessage(role = it.role, content = it.content) }
+                    .toMutableList()
                 if (systemPrompt.isNotBlank()) {
                     allMessages.add(0, ChatMessage(role = "system", content = systemPrompt))
                 }
 
-                AppLogger.i("ChatVM", "Starting stream, model=$model")
+                AppLogger.i(
+                    "ChatVM",
+                    "Starting stream, model=$model, contextMessages=${contextWindow.messages.size}, rollingSummary=${contextWindow.summary.isNotBlank()}"
+                )
 
                 streamJob = viewModelScope.launch {
                     var accumulated = ""
@@ -267,7 +294,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         persona: Persona? = null,
         toolResults: List<String> = emptyList(),
         appliedActionLines: List<String> = emptyList(),
-        temporaryResponseFormat: String? = null
+        temporaryResponseFormat: String? = null,
+        rollingSummary: String = ""
     ): String {
         val base = MemoryEngine.buildRecallPrompt(
             persona = persona,
@@ -279,6 +307,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return buildString {
             append(base)
             appendLine()
+            if (rollingSummary.isNotBlank()) {
+                appendLine("[Rolling Conversation Summary]")
+                appendLine(rollingSummary)
+                appendLine()
+            }
             appendLine("[Environment]")
             appendLine("Current time: ${java.time.Instant.ofEpochMilli(System.currentTimeMillis())}")
             if (temporaryResponseFormat != null) {
