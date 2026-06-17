@@ -2,7 +2,7 @@
 param(
     [string]$AdbPath = "adb",
     [string]$DeviceId = "",
-    [string]$ApkPath = "app/build/outputs/apk/debug/MemoryChat-v1.0.66-debug.apk",
+    [string]$ApkPath = "app/build/outputs/apk/debug/MemoryChat-v1.0.67-debug.apk",
     [string]$PackageName = "com.memorychat.app",
     [string]$Receiver = "com.memorychat.app/.AdbInputReceiver",
     [string]$Action = "com.memorychat.app.SEND_MESSAGE",
@@ -109,6 +109,47 @@ function ConvertTo-ShellSingleQuoted {
     return "'" + ($Value -replace "'", "'\''") + "'"
 }
 
+function Export-AppDatabase {
+    param([Parameter(Mandatory = $true)][string]$DatabasePath)
+
+    $dbExportArgs = Get-AdbArgs -Args @("exec-out", "run-as", $PackageName, "cat", "databases/memorychat.db")
+    Invoke-ProcessBinaryToFile -FileName $AdbPath -Args $dbExportArgs -OutputPath $DatabasePath
+    if ((Get-Item -LiteralPath $DatabasePath).Length -le 0) {
+        throw "exported database is empty: $DatabasePath"
+    }
+
+    foreach ($suffix in @("-wal", "-shm")) {
+        $sidecarPath = "${DatabasePath}${suffix}"
+        $remoteName = "memorychat.db${suffix}"
+        $sidecarArgs = Get-AdbArgs -Args @(
+            "exec-out",
+            "run-as",
+            $PackageName,
+            "sh",
+            "-c",
+            "if [ -f databases/$remoteName ]; then cat databases/$remoteName; fi"
+        )
+        Invoke-ProcessBinaryToFile -FileName $AdbPath -Args $sidecarArgs -OutputPath $sidecarPath
+        if ((Get-Item -LiteralPath $sidecarPath).Length -le 0) {
+            Remove-Item -LiteralPath $sidecarPath -Force
+        }
+    }
+}
+
+function Get-LocalConversationTitle {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    $normalized = [regex]::Replace($Value, "\s+", " ").Trim()
+    $normalized = $normalized.Trim([char[]]@("。", ".", "，", ",", "！", "!", "？", "?", ":", "：", '"', "'", "“", "”"))
+    if ([string]::IsNullOrWhiteSpace($normalized)) {
+        return "新会话"
+    }
+    if ($normalized.Length -le 16) {
+        return $normalized
+    }
+    return $normalized.Substring(0, 16) + "…"
+}
+
 function Invoke-PythonLatestConversationId {
     param(
         [Parameter(Mandatory = $true)][string]$DatabasePath,
@@ -149,6 +190,48 @@ print(row[0])
     return [string]$conversationId
 }
 
+function Invoke-PythonConversationTitle {
+    param(
+        [Parameter(Mandatory = $true)][string]$DatabasePath,
+        [Parameter(Mandatory = $true)][string]$ConversationId,
+        [Parameter(Mandatory = $true)][string]$WorkDir
+    )
+
+    $queryScript = Join-Path -Path $WorkDir -ChildPath "conversation_title.py"
+    @'
+import sqlite3
+import sys
+
+db_path = sys.argv[1]
+conversation_id = sys.argv[2]
+conn = sqlite3.connect(db_path)
+try:
+    row = conn.execute(
+        "SELECT title FROM conversations WHERE id = ?",
+        (conversation_id,),
+    ).fetchone()
+finally:
+    conn.close()
+
+if not row:
+    print(f"Conversation not found: {conversation_id}", file=sys.stderr)
+    sys.exit(2)
+
+print(row[0])
+'@ | Set-Content -LiteralPath $queryScript -Encoding UTF8
+
+    $output = & $PythonPath $queryScript $DatabasePath $ConversationId 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "python failed to read conversation title: $($output -join [Environment]::NewLine)"
+    }
+
+    $title = ($output | Select-Object -First 1)
+    if ($null -eq $title) {
+        return ""
+    }
+    return [string]$title
+}
+
 $resolvedApkPath = Resolve-RepoPath -Path $ApkPath
 if (-not (Test-Path -LiteralPath $resolvedApkPath)) {
     throw "APK not found: $resolvedApkPath"
@@ -180,11 +263,7 @@ Write-Host "  3. Do not paste or enter API keys in this terminal."
 [void](Read-Host "Press Enter after the conversation exists")
 
 Write-Host "Exporting app database with run-as..."
-$dbExportArgs = Get-AdbArgs -Args @("exec-out", "run-as", $PackageName, "cat", "databases/memorychat.db")
-Invoke-ProcessBinaryToFile -FileName $AdbPath -Args $dbExportArgs -OutputPath $dbPath
-if ((Get-Item -LiteralPath $dbPath).Length -le 0) {
-    throw "exported database is empty: $dbPath"
-}
+Export-AppDatabase -DatabasePath $dbPath
 
 $conversationId = Invoke-PythonLatestConversationId -DatabasePath $dbPath -WorkDir $OutDir
 Write-Host "Latest conversation id: $conversationId"
@@ -235,8 +314,19 @@ if ($logText -notmatch "\\[4/4\\] API response" -or $logText -notmatch "=== DONE
     throw "smoke failed: missing successful API response or completion marker in $logPath"
 }
 
+$postDbPath = Join-Path -Path $OutDir -ChildPath "memorychat-after.db"
+Write-Host "Exporting app database after broadcast..."
+Export-AppDatabase -DatabasePath $postDbPath
+$expectedTitle = Get-LocalConversationTitle -Value $Message
+$actualTitle = Invoke-PythonConversationTitle -DatabasePath $postDbPath -ConversationId $conversationId -WorkDir $OutDir
+if ($actualTitle -ne $expectedTitle) {
+    throw "smoke failed: conversation title mismatch. expected '$expectedTitle', got '$actualTitle'"
+}
+
 Write-Host ""
 Write-Host "Smoke command finished."
 Write-Host "Database copy: $dbPath"
+Write-Host "Database copy after broadcast: $postDbPath"
 Write-Host "Related logcat: $logPath"
 Write-Host "Verified AdbInput '[4/4] API response' and completion marker."
+Write-Host "Verified conversation title auto-update: $actualTitle"

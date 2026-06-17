@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.memorychat.app.MemoryChatApp
+import com.memorychat.app.domain.engine.ConversationTitleGenerator
 import com.memorychat.app.domain.model.Conversation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,7 +28,7 @@ class ConversationListViewModel(application: Application) : AndroidViewModel(app
         }
     }
 
-    fun createConversation(title: String = "新会话", onCreated: (String) -> Unit) {
+    fun createConversation(title: String = ConversationTitleGenerator.PLACEHOLDER_TITLE, onCreated: (String) -> Unit) {
         val conv = Conversation(title = title)
         viewModelScope.launch {
             val configuredPersonaId = app.settingsDataStore.defaultPersonaId.first().takeIf { it.isNotBlank() }

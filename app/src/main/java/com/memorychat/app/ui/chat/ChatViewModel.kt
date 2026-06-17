@@ -16,6 +16,7 @@ import com.memorychat.app.domain.engine.ChatContextWindowConfig
 import com.memorychat.app.domain.engine.ChatContextWindowManager
 import com.memorychat.app.domain.engine.ChatContextWindowResult
 import com.memorychat.app.domain.engine.ContextLengthErrorDetector
+import com.memorychat.app.domain.engine.ConversationTitleGenerator
 import com.memorychat.app.domain.engine.ConversationMessageStore
 import com.memorychat.app.domain.engine.LlmConversationContextSummarizer
 import com.memorychat.app.domain.engine.MemoryExtractionSaver
@@ -128,6 +129,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val userMsg = ChatMessage(conversationId = activeConv.id, role = "user", content = content)
                 app.conversationRepo.saveMessage(userMsg)
                 _messages.value = _messages.value + userMsg
+                val localAutoTitle = ConversationTitleGenerator.localTitleFromUserMessage(content)
+                updateConversationTitleIfAuto(
+                    conversationId = activeConv.id,
+                    newTitle = localAutoTitle,
+                    knownAutoTitle = ConversationTitleGenerator.PLACEHOLDER_TITLE
+                )
 
                 val decision = AgentDecisionEngine(provider, model).decide(content, loadedPersona)
                 _activeToolTrace.value = runningTraceForDecision(decision, content)
@@ -146,6 +153,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     completedTraceForTurn()?.let { trace ->
                         _completedToolTraces.value = _completedToolTraces.value + (assistantMsg.id to trace)
                     }
+                    maybeGenerateSmartTitle(activeConv.id, userMsg, assistantMsg)
                     AppLogger.i("ChatVM", "Direct agent action answer saved")
                     finishGeneration()
                     return@launch
@@ -262,6 +270,74 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _isGenerating.value = false
     }
 
+    private suspend fun updateConversationTitleIfAuto(
+        conversationId: String,
+        newTitle: String,
+        knownAutoTitle: String
+    ): Conversation? {
+        val updated = app.conversationRepo.updateConversationTitleIfAuto(
+            conversationId = conversationId,
+            newTitle = newTitle,
+            knownAutoTitle = knownAutoTitle
+        )
+        if (updated != null && _conversation.value?.id == updated.id) {
+            _conversation.value = updated
+        }
+        return updated
+    }
+
+    private fun maybeGenerateSmartTitle(
+        conversationId: String,
+        userMsg: ChatMessage,
+        assistantMsg: ChatMessage
+    ) {
+        val provider = llmProvider ?: return
+        val localAutoTitle = ConversationTitleGenerator.localTitleFromUserMessage(userMsg.content)
+        viewModelScope.launch {
+            try {
+                val current = app.conversationRepo.getConversation(conversationId) ?: return@launch
+                if (!ConversationTitleGenerator.canAutoReplace(current.title, localAutoTitle)) {
+                    return@launch
+                }
+                val model = app.settingsDataStore.modelName.first()
+                val response = provider.complete(
+                    ChatRequest(
+                        messages = listOf(
+                            ChatMessage(
+                                role = "user",
+                                content = buildTitlePrompt(userMsg.content, assistantMsg.content)
+                            )
+                        ),
+                        model = model,
+                        stream = false
+                    )
+                )
+                val smartTitle = ConversationTitleGenerator.smartTitleFromModelOutput(response.content)
+                if (smartTitle != ConversationTitleGenerator.PLACEHOLDER_TITLE) {
+                    updateConversationTitleIfAuto(
+                        conversationId = conversationId,
+                        newTitle = smartTitle,
+                        knownAutoTitle = localAutoTitle
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLogger.w("ChatVM", "Smart title generation failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun buildTitlePrompt(userContent: String, assistantContent: String): String {
+        return """
+            请为下面这段对话生成一个简短会话标题。
+            要求：中文优先，不超过 12 个汉字或 5 个英文词；不要解释；不要加引号；只输出标题。
+
+            用户：$userContent
+            助手：${assistantContent.take(500)}
+        """.trimIndent()
+    }
+
     private data class PreparedChatContext(
         val messages: List<ChatMessage>,
         val contextWindow: ChatContextWindowResult
@@ -368,6 +444,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         _activeToolTrace.value = null
         AppLogger.d("ChatVM", "Message saved to DB and added to list")
+        maybeGenerateSmartTitle(activeConv.id, userMsg, assistantMsg)
         if (memoryWritten) {
             saveExtractionWatermark(activeConv.id, listOf(userMsg, assistantMsg))
             AppLogger.i("ChatVM", "Memory extraction skipped: agent memory tool already wrote this turn")

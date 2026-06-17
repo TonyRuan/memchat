@@ -4,6 +4,10 @@ import com.google.gson.JsonParser
 import com.memorychat.app.data.local.db.dao.MemoryDao
 import com.memorychat.app.data.local.db.dao.MemoryTombstoneDao
 import com.memorychat.app.data.local.db.dao.PersonaDao
+import com.memorychat.app.data.local.db.dao.ConversationDao
+import com.memorychat.app.data.local.db.dao.MessageDao
+import com.memorychat.app.data.local.db.entity.ConversationEntity
+import com.memorychat.app.data.local.db.entity.MessageEntity
 import com.memorychat.app.data.local.db.entity.MemoryEntity
 import com.memorychat.app.data.local.db.entity.MemoryTombstoneEntity
 import com.memorychat.app.data.local.db.entity.PersonaEntity
@@ -18,6 +22,58 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RepositoriesTest {
+    @Test
+    fun updateConversationTitleIfAutoReplacesPlaceholderTitle() = runBlocking {
+        val conversationDao = FakeConversationDao().apply {
+            insert(ConversationEntity(id = "conv-1", title = "新会话"))
+        }
+        val repo = ConversationRepository(conversationDao, FakeMessageDao())
+
+        val updated = repo.updateConversationTitleIfAuto(
+            conversationId = "conv-1",
+            newTitle = "Persona 改名测试",
+            knownAutoTitle = "你叫噜噜"
+        )
+
+        assertEquals("Persona 改名测试", updated?.title)
+        assertEquals("Persona 改名测试", conversationDao.getById("conv-1")?.title)
+    }
+
+    @Test
+    fun updateConversationTitleIfAutoDoesNotOverwriteManualTitle() = runBlocking {
+        val conversationDao = FakeConversationDao().apply {
+            insert(ConversationEntity(id = "conv-1", title = "用户手动标题"))
+        }
+        val repo = ConversationRepository(conversationDao, FakeMessageDao())
+
+        val unchanged = repo.updateConversationTitleIfAuto(
+            conversationId = "conv-1",
+            newTitle = "Persona 改名测试",
+            knownAutoTitle = "你叫噜噜"
+        )
+
+        assertEquals("用户手动标题", unchanged?.title)
+        assertEquals("用户手动标题", conversationDao.getById("conv-1")?.title)
+    }
+
+    @Test
+    fun updateConversationTitleIfAutoDoesNotOverwriteTitleChangedDuringUpdate() = runBlocking {
+        val conversationDao = FakeConversationDao().apply {
+            insert(ConversationEntity(id = "conv-1", title = "新会话"))
+            simulateManualTitleBeforeNextWrite("conv-1", "用户手动标题")
+        }
+        val repo = ConversationRepository(conversationDao, FakeMessageDao())
+
+        val unchanged = repo.updateConversationTitleIfAuto(
+            conversationId = "conv-1",
+            newTitle = "Persona 改名测试",
+            knownAutoTitle = "新会话"
+        )
+
+        assertEquals("用户手动标题", unchanged?.title)
+        assertEquals("用户手动标题", conversationDao.getById("conv-1")?.title)
+    }
+
     @Test
     fun getOrCreateDefaultPersonaCreatesSeedWhenMissing() = runBlocking {
         val personaDao = FakePersonaDao()
@@ -257,6 +313,72 @@ class RepositoriesTest {
 
         assertEquals(1, memories.size())
         assertEquals("active", memories[0].asJsonObject.get("id").asString)
+    }
+
+    private class FakeConversationDao : ConversationDao {
+        private val conversations = LinkedHashMap<String, ConversationEntity>()
+        private var beforeNextWrite: (() -> Unit)? = null
+
+        override suspend fun getAll(): List<ConversationEntity> {
+            return conversations.values.sortedByDescending { it.updatedAt }
+        }
+
+        override suspend fun getById(id: String): ConversationEntity? {
+            return conversations[id]
+        }
+
+        override suspend fun insert(entity: ConversationEntity) {
+            beforeNextWrite?.invoke()
+            beforeNextWrite = null
+            conversations[entity.id] = entity
+        }
+
+        override suspend fun update(entity: ConversationEntity) {
+            conversations[entity.id] = entity
+        }
+
+        override suspend fun updateTitleIfCurrent(
+            id: String,
+            newTitle: String,
+            updatedAt: Long,
+            placeholderTitle: String,
+            knownAutoTitle: String
+        ): Int {
+            beforeNextWrite?.invoke()
+            beforeNextWrite = null
+            val current = conversations[id] ?: return 0
+            if (current.title != placeholderTitle && current.title != knownAutoTitle) {
+                return 0
+            }
+            conversations[id] = current.copy(title = newTitle, updatedAt = updatedAt)
+            return 1
+        }
+
+        override suspend fun delete(id: String) {
+            conversations.remove(id)
+        }
+
+        fun simulateManualTitleBeforeNextWrite(id: String, title: String) {
+            beforeNextWrite = {
+                conversations[id]?.let { existing ->
+                    conversations[id] = existing.copy(title = title)
+                }
+            }
+        }
+    }
+
+    private class FakeMessageDao : MessageDao {
+        override suspend fun getByConversationId(convId: String): List<MessageEntity> = emptyList()
+
+        override suspend fun getByConversationIdAfter(convId: String, createdAfter: Long): List<MessageEntity> = emptyList()
+
+        override suspend fun insert(entity: MessageEntity) = Unit
+
+        override suspend fun delete(id: String) = Unit
+
+        override suspend fun countByConversationId(convId: String): Int = 0
+
+        override suspend fun deleteByConversationId(convId: String) = Unit
     }
 
     private class FakePersonaDao : PersonaDao {

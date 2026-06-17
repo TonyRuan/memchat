@@ -26,6 +26,7 @@ import com.memorychat.app.domain.engine.ChatContextWindowConfig
 import com.memorychat.app.domain.engine.ChatContextWindowManager
 import com.memorychat.app.domain.engine.ChatContextWindowResult
 import com.memorychat.app.domain.engine.ContextLengthErrorDetector
+import com.memorychat.app.domain.engine.ConversationTitleGenerator
 import com.memorychat.app.domain.engine.LlmConversationContextSummarizer
 import com.memorychat.app.domain.engine.MemoryExtractionSaver
 import com.memorychat.app.domain.engine.MemoryExtractionStore
@@ -80,6 +81,13 @@ class AdbInputReceiver : BroadcastReceiver() {
                     createdAt = System.currentTimeMillis()
                 )
                 db.messageDao().insert(userMsg)
+                val localAutoTitle = ConversationTitleGenerator.localTitleFromUserMessage(message)
+                updateConversationTitleIfAuto(
+                    db = db,
+                    conversationId = conversationId,
+                    newTitle = localAutoTitle,
+                    knownAutoTitle = ConversationTitleGenerator.PLACEHOLDER_TITLE
+                )
                 Log.i("AdbInput", "[1/4] User message saved")
 
                 // Get API settings
@@ -522,6 +530,26 @@ class AdbInputReceiver : BroadcastReceiver() {
                 retryAfterContextLimit = retryAfterContextLimit
             )
         )
+    }
+
+    private suspend fun updateConversationTitleIfAuto(
+        db: AppDatabase,
+        conversationId: String,
+        newTitle: String,
+        knownAutoTitle: String
+    ) {
+        val title = newTitle.trim()
+        if (title.isBlank()) return
+        val updatedRows = db.conversationDao().updateTitleIfCurrent(
+            id = conversationId,
+            newTitle = title,
+            updatedAt = System.currentTimeMillis(),
+            placeholderTitle = ConversationTitleGenerator.PLACEHOLDER_TITLE,
+            knownAutoTitle = knownAutoTitle.trim()
+        )
+        if (updatedRows > 0) {
+            Log.i("AdbInput", "Conversation title auto-updated: $title")
+        }
     }
 
     private fun decorateSystemPrompt(

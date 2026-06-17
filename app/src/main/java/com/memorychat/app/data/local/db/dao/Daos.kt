@@ -17,6 +17,21 @@ interface ConversationDao {
     @Update
     suspend fun update(entity: ConversationEntity)
 
+    @Query(
+        """
+        UPDATE conversations
+        SET title = :newTitle, updatedAt = :updatedAt
+        WHERE id = :id AND (title = :placeholderTitle OR title = :knownAutoTitle)
+        """
+    )
+    suspend fun updateTitleIfCurrent(
+        id: String,
+        newTitle: String,
+        updatedAt: Long,
+        placeholderTitle: String,
+        knownAutoTitle: String
+    ): Int
+
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun delete(id: String)
 }

@@ -1,5 +1,26 @@
 # MemoryChat Development Log
 
+## v1.0.67 (2026-06-17)
+
+### Changes
+- Added automatic conversation titles: a new chat starts as `新会话`, then immediately uses the first user message as a local title after send
+- Added background smart-title generation after the assistant reply is saved, using the configured model to replace only the placeholder or the known local auto-title
+- Added DAO-level atomic overwrite protection so future manual titles are not replaced by concurrent automatic title updates
+- Reloaded the conversation list on resume so title updates written from the chat screen are visible after returning to the list
+- Updated the ADB broadcast path to apply the same local first-message title behavior without adding an extra model call to smoke tests
+- Added an ADB smoke database assertion for the local first-message title update
+- Updated the emulator smoke script default APK path to v1.0.67
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.ConversationTitleGeneratorTest" --tests "com.memorychat.app.data.repository.RepositoriesTest.updateConversationTitleIfAutoReplacesPlaceholderTitle" --tests "com.memorychat.app.data.repository.RepositoriesTest.updateConversationTitleIfAutoDoesNotOverwriteManualTitle" --tests "com.memorychat.app.data.repository.RepositoriesTest.updateConversationTitleIfAutoDoesNotOverwriteTitleChangedDuringUpdate"` (RED failed before implementation, then passed)
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.67-debug.apk`
+
+---
+
 ## v1.0.66 (2026-06-17)
 
 ### Changes

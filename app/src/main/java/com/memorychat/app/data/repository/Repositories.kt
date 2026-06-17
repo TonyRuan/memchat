@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.memorychat.app.data.local.db.dao.*
 import com.memorychat.app.data.local.db.entity.*
+import com.memorychat.app.domain.engine.ConversationTitleGenerator
 import com.memorychat.app.domain.model.*
 import java.security.MessageDigest
 
@@ -19,6 +20,23 @@ class ConversationRepository(
     suspend fun getAllConversations() = conversationDao.getAll().map { it.toDomain() }
     suspend fun getConversation(id: String) = conversationDao.getById(id)?.toDomain()
     suspend fun saveConversation(conv: Conversation) = conversationDao.insert(conv.toEntity())
+    suspend fun updateConversationTitleIfAuto(
+        conversationId: String,
+        newTitle: String,
+        knownAutoTitle: String
+    ): Conversation? {
+        val title = newTitle.trim()
+        if (title.isBlank()) return getConversation(conversationId)
+        conversationDao.updateTitleIfCurrent(
+            id = conversationId,
+            newTitle = title,
+            updatedAt = System.currentTimeMillis(),
+            placeholderTitle = ConversationTitleGenerator.PLACEHOLDER_TITLE,
+            knownAutoTitle = knownAutoTitle.trim()
+        )
+        return getConversation(conversationId)
+    }
+
     suspend fun deleteConversation(id: String) {
         messageDao.deleteByConversationId(id)
         conversationDao.delete(id)

@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.memorychat.app.ui.components.MemoryExtractionIndicator
 import java.text.SimpleDateFormat
@@ -26,8 +27,21 @@ fun ConversationListScreen(
     onNavigateToLogs: () -> Unit,
     viewModel: ConversationListViewModel = viewModel()
 ) {
+    val lifecycleOwner = LocalLifecycleOwner.current
     val conversations by viewModel.conversations.collectAsState()
     val isMemoryExtractionActive by viewModel.isMemoryExtractionActive.collectAsState()
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.loadConversations()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     Scaffold(
         topBar = {
