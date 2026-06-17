@@ -8,6 +8,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.memorychat.app.BuildConfig
+import com.memorychat.app.domain.model.ConversationDebugSnapshot
+import com.memorychat.app.domain.model.ConversationDebugSnapshotJson
 import com.memorychat.app.domain.model.ModelRuntimeDefaults
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -127,6 +129,15 @@ class SettingsDataStore(private val context: Context) {
     suspend fun saveConversationRollingSummaryWatermark(conversationId: String, value: Long) {
         val key = longPreferencesKey("conversation_rolling_summary_watermark_$conversationId")
         context.dataStore.edit { it[key] = value }
+    }
+    suspend fun getConversationDebugSnapshot(conversationId: String): ConversationDebugSnapshot? {
+        val key = stringPreferencesKey("conversation_debug_snapshot_$conversationId")
+        val json = context.dataStore.data.map { it[key] ?: "" }.first()
+        return ConversationDebugSnapshotJson.fromJson(json)
+    }
+    suspend fun saveConversationDebugSnapshot(conversationId: String, snapshot: ConversationDebugSnapshot) {
+        val key = stringPreferencesKey("conversation_debug_snapshot_$conversationId")
+        context.dataStore.edit { it[key] = ConversationDebugSnapshotJson.toJson(snapshot) }
     }
 
     // API Key save uses EncryptedSharedPreferences

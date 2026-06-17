@@ -40,6 +40,7 @@ fun ChatScreen(
     val completedToolTraces by viewModel.completedToolTraces.collectAsState()
     val conversation by viewModel.conversation.collectAsState()
     val memoryExtractionStatus by viewModel.memoryExtractionStatus.collectAsState()
+    val chatStatusMessage by viewModel.chatStatusMessage.collectAsState()
     val activeExtractionConversations by viewModel.activeMemoryExtractionConversationIds.collectAsState()
     val isCurrentConversationExtracting = conversationId in activeExtractionConversations
     val listState = rememberLazyListState()
@@ -68,6 +69,13 @@ fun ChatScreen(
         memoryExtractionStatus?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.clearMemoryExtractionStatus()
+        }
+    }
+
+    LaunchedEffect(chatStatusMessage) {
+        chatStatusMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearChatStatusMessage()
         }
     }
 
@@ -227,8 +235,8 @@ fun ChatScreen(
                     IconButton(
                         onClick = {
                             if (inputText.isNotBlank()) {
-                                viewModel.sendMessage(inputText.trim())
-                                inputText = ""
+                                val accepted = viewModel.sendMessage(inputText.trim())
+                                if (accepted) inputText = ""
                             }
                         },
                         enabled = inputText.isNotBlank()

@@ -1,5 +1,26 @@
 # MemoryChat Development Log
 
+## v1.0.66 (2026-06-17)
+
+### Changes
+- Prevented chat input loss when a conversation or model provider is not ready; the chat page now keeps the draft and shows a snackbar instead of silently clearing text
+- Added persistent per-conversation Debug snapshots for recall results, rolling summary, compression watermark, request context size, and context-limit retry state
+- Added one automatic context-limit retry path: when a context length error is detected, the app forces rolling-summary compression and retries the model request once
+- Added editable Persona cards in the memory/persona center and exposed Persona JSON import in Settings
+- Ensured only one Persona can be marked as default and made Persona import report skipped invalid rows instead of silently swallowing them
+- Updated the emulator smoke script default APK path to v1.0.66
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.ChatContextWindowManagerTest" --tests "com.memorychat.app.domain.engine.ContextLengthErrorDetectorTest" --tests "com.memorychat.app.ui.chat.ChatSendReadinessPolicyTest" --tests "com.memorychat.app.domain.model.ConversationDebugSnapshotTest" --tests "com.memorychat.app.ui.memory.PersonaDisplayFormatterTest"`
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.data.repository.RepositoriesTest.savingDefaultPersonaClearsOtherDefaults" --tests "com.memorychat.app.data.repository.RepositoriesTest.importPersonasJsonReportsInvalidRows"`
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.66-debug.apk`
+
+---
+
 ## v1.0.65 (2026-06-17)
 
 ### Changes

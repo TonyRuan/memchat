@@ -1,5 +1,7 @@
 package com.memorychat.app.ui.memory
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,6 +32,7 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
     var refreshTrigger by remember { mutableIntStateOf(0) }
     var selectedTab by remember { mutableIntStateOf(0) }
     var editingMemory by remember { mutableStateOf<Memory?>(null) }
+    var editingPersona by remember { mutableStateOf<Persona?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
 
     DisposableEffect(lifecycleOwner) {
@@ -91,6 +94,13 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (selectedTab == 1) {
+                    item {
+                        Text(
+                            text = "人格是助手的名字、角色和语气设置，不属于用户长期记忆。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     if (personas.isEmpty()) {
                         item {
                             Text(
@@ -101,7 +111,7 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
                         }
                     }
                     items(personas, key = { it.id }) { persona ->
-                        PersonaCard(persona = persona)
+                        PersonaCard(persona = persona, onEdit = { editingPersona = persona })
                     }
                 } else {
                     items(filteredMemories, key = { it.id }) { memory ->
@@ -148,6 +158,20 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
         )
     }
 
+    editingPersona?.let { persona ->
+        EditPersonaDialog(
+            persona = persona,
+            onDismiss = { editingPersona = null },
+            onSave = { updated ->
+                scope.launch {
+                    app.personaRepo.savePersona(updated)
+                    personas = app.personaRepo.listPersonas()
+                    editingPersona = null
+                }
+            }
+        )
+    }
+
     // Add dialog
     if (showAddDialog) {
         AddMemoryDialog(
@@ -164,17 +188,22 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
 }
 
 @Composable
-fun PersonaCard(persona: Persona) {
+fun PersonaCard(persona: Persona, onEdit: () -> Unit) {
     val fields = PersonaDisplayFormatter.fields(persona)
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(persona.name, style = MaterialTheme.typography.titleMedium)
-                AssistChip(
-                    onClick = {},
-                    label = { Text(if (persona.isDefault) "默认人格" else "人格") }
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(if (persona.isDefault) "默认人格" else "人格") }
+                    )
+                    IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Edit, "编辑人格", modifier = Modifier.size(18.dp))
+                    }
+                }
             }
             if (fields.isEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -200,6 +229,62 @@ fun PersonaCard(persona: Persona) {
             }
         }
     }
+}
+
+@Composable
+fun EditPersonaDialog(persona: Persona, onDismiss: () -> Unit, onSave: (Persona) -> Unit) {
+    var name by remember { mutableStateOf(persona.name) }
+    var description by remember { mutableStateOf(persona.description.orEmpty()) }
+    var role by remember { mutableStateOf(persona.role.orEmpty()) }
+    var tone by remember { mutableStateOf(persona.tone.orEmpty()) }
+    var behaviorRules by remember { mutableStateOf(persona.behaviorRules.joinToString("；")) }
+    var boundaries by remember { mutableStateOf(persona.boundaries.joinToString("；")) }
+    var isDefault by remember { mutableStateOf(persona.isDefault) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑人格") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名称") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("描述") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = role, onValueChange = { role = it }, label = { Text("角色") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = tone, onValueChange = { tone = it }, label = { Text("语气") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = behaviorRules, onValueChange = { behaviorRules = it }, label = { Text("行为规则（用分号分隔）") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = boundaries, onValueChange = { boundaries = it }, label = { Text("边界（用分号分隔）") }, modifier = Modifier.fillMaxWidth())
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("默认人格")
+                    Switch(checked = isDefault, onCheckedChange = { isDefault = it })
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (name.isNotBlank()) {
+                        onSave(
+                            persona.copy(
+                                name = name.trim(),
+                                description = description.trim().ifBlank { null },
+                                role = role.trim().ifBlank { null },
+                                tone = tone.trim().ifBlank { null },
+                                behaviorRules = PersonaDisplayFormatter.parseListField(behaviorRules),
+                                boundaries = PersonaDisplayFormatter.parseListField(boundaries),
+                                isDefault = isDefault,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
+            ) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }
 
 @Composable

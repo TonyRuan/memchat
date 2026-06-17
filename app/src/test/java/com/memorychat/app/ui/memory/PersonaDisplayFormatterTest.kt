@@ -48,4 +48,12 @@ class PersonaDisplayFormatterTest {
 
         assertEquals(listOf("语气" to "冷静"), fields)
     }
+
+    @Test
+    fun parsesEditableListFieldsFromChineseSemicolonText() {
+        assertEquals(
+            listOf("先说结论", "不确定时说明"),
+            PersonaDisplayFormatter.parseListField("先说结论；不确定时说明")
+        )
+    }
 }

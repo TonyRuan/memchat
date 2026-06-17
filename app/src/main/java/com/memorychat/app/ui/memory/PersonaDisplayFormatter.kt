@@ -19,4 +19,11 @@ object PersonaDisplayFormatter {
             add(label to text)
         }
     }
+
+    fun parseListField(value: String): List<String> {
+        return value
+            .split("；", ";", "\n")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+    }
 }

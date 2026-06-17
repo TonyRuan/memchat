@@ -108,6 +108,30 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
     }
 
+    val personaImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val json = context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                    if (json != null) {
+                        val result = app.exportImportService.importPersonasJson(json)
+                        Toast.makeText(
+                            context,
+                            "人格导入完成: ${result.imported}条导入${if (result.errors.isNotEmpty()) ", ${result.errors.size}个错误" else ""}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        Toast.makeText(context, "读取文件失败", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "人格导入失败: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
     fun shareFile(content: String, fileName: String, mimeType: String) {
         try {
             val dir = File(context.getExternalFilesDir(null), "exports")
@@ -279,13 +303,22 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             // 人格导出按钮
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = {
-                    scope.launch {
-                        val json = app.exportImportService.exportPersonasJson()
-                        val fileName = "personas_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.json"
-                        shareFile(json, fileName, "application/json")
-                    }
-                }) { Text("导出人格 JSON") }
+                OutlinedButton(
+                    onClick = { personaImportLauncher.launch(arrayOf("application/json")) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("导入人格 JSON")
+                }
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            val json = app.exportImportService.exportPersonasJson()
+                            val fileName = "personas_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.json"
+                            shareFile(json, fileName, "application/json")
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) { Text("导出人格 JSON") }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

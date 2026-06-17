@@ -10,7 +10,8 @@ data class ChatContextWindowConfig(
     val maxCompletionTokens: Int,
     val safetyMarginTokens: Int,
     val compressionMessageTurnThreshold: Int,
-    val recentMessageCount: Int = 12
+    val recentMessageCount: Int = 12,
+    val forceCompression: Boolean = false
 )
 
 data class ChatContextWindowResult(
@@ -48,7 +49,7 @@ class ChatContextWindowManager(
         }
         val overTurnThreshold = visibleWithoutNewCompression.size > config.compressionMessageTurnThreshold
         val overTokenBudget = estimateTokens(summary, visibleWithoutNewCompression) > availablePromptTokens
-        if (overTurnThreshold || overTokenBudget) {
+        if (config.forceCompression || overTurnThreshold || overTokenBudget) {
             val candidates = visibleWithoutNewCompression.dropLast(recentCount)
             if (candidates.isNotEmpty()) {
                 val newSummary = summarizer.summarize(summary, candidates).trim()

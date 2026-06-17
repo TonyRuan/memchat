@@ -59,6 +59,42 @@ class RepositoriesTest {
     }
 
     @Test
+    fun savingDefaultPersonaClearsOtherDefaults() = runBlocking {
+        val personaDao = FakePersonaDao().apply {
+            insert(PersonaEntity(id = "p1", name = "旧默认", isDefault = 1))
+            insert(PersonaEntity(id = "p2", name = "普通", isDefault = 0))
+        }
+        val personaRepo = PersonaRepository(personaDao)
+
+        personaRepo.savePersona(Persona(id = "p2", name = "新默认", isDefault = true))
+
+        assertEquals(0, personaDao.getById("p1")?.isDefault)
+        assertEquals(1, personaDao.getById("p2")?.isDefault)
+        assertEquals("p2", personaDao.getDefault()?.id)
+    }
+
+    @Test
+    fun importPersonasJsonReportsInvalidRows() = runBlocking {
+        val personaRepo = PersonaRepository(FakePersonaDao())
+        val service = ExportImportService(MemoryRepository(FakeMemoryDao(), FakeMemoryTombstoneDao()), personaRepo)
+        val json = """
+            {
+              "personas": [
+                { "id": "blank", "name": " " },
+                { "id": "ok", "name": "可用人格" }
+              ]
+            }
+        """.trimIndent()
+
+        val result = service.importPersonasJson(json)
+
+        assertEquals(1, result.imported)
+        assertEquals(1, result.skipped)
+        assertTrue(result.errors.any { it.contains("empty persona name") })
+        assertNotNull(personaRepo.getPersona("ok"))
+    }
+
+    @Test
     fun exportPersonasJsonUsesSnakeCaseFieldNames() = runBlocking {
         val personaRepo = PersonaRepository(FakePersonaDao().apply {
             insert(PersonaEntity(

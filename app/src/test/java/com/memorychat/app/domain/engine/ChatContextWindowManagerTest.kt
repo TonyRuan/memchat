@@ -73,6 +73,41 @@ class ChatContextWindowManagerTest {
         assertEquals(false, result.summaryUpdated)
     }
 
+    @Test
+    fun forceCompressionSummarizesOlderMessagesEvenBelowNormalThreshold() = runTest {
+        val summarizer = FakeSummarizer("强制压缩摘要")
+        val manager = ChatContextWindowManager(summarizer)
+        val messages = (1L..5L).map { index ->
+            ChatMessage(
+                id = "msg-$index",
+                conversationId = "conv-1",
+                role = "user",
+                content = "message-$index",
+                createdAt = index
+            )
+        }
+
+        val result = manager.build(
+            messages = messages,
+            existingSummary = "",
+            summaryWatermark = 0L,
+            config = ChatContextWindowConfig(
+                contextWindowTokens = 10_000,
+                maxCompletionTokens = 100,
+                safetyMarginTokens = 100,
+                compressionMessageTurnThreshold = 200,
+                recentMessageCount = 2,
+                forceCompression = true
+            )
+        )
+
+        assertEquals("强制压缩摘要", result.summary)
+        assertEquals(listOf("msg-1", "msg-2", "msg-3"), summarizer.requests.single().map { it.id })
+        assertEquals(listOf("msg-4", "msg-5"), result.messages.map { it.id })
+        assertEquals(3L, result.summaryWatermark)
+        assertTrue(result.summaryUpdated)
+    }
+
     private class FakeSummarizer(private val response: String) : ConversationContextSummarizer {
         val requests = mutableListOf<List<ChatMessage>>()
 

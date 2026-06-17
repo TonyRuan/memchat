@@ -112,7 +112,16 @@ class PersonaRepository(private val personaDao: PersonaDao) {
     suspend fun getDefaultPersona() = personaDao.getDefault()?.toDomain()
     suspend fun getPersona(id: String) = personaDao.getById(id)?.toDomain()
     suspend fun listPersonas() = personaDao.getAll().map { it.toDomain() }
-    suspend fun savePersona(persona: Persona) = personaDao.insert(persona.toEntity())
+    suspend fun savePersona(persona: Persona) {
+        if (persona.isDefault) {
+            listPersonas()
+                .filter { it.id != persona.id && it.isDefault }
+                .forEach { existing ->
+                    personaDao.insert(existing.copy(isDefault = false).toEntity())
+                }
+        }
+        personaDao.insert(persona.toEntity())
+    }
     suspend fun deletePersona(id: String) = personaDao.delete(id)
 
     suspend fun getOrCreateDefaultPersona(): Persona {
@@ -239,12 +248,20 @@ class ExportImportService(
             val obj = com.google.gson.JsonParser.parseString(json).asJsonObject
             val arr = obj.getAsJsonArray("personas") ?: return ImportResult(0, 0, listOf("No personas array"))
             var imported = 0
+            var skipped = 0
+            val errors = mutableListOf<String>()
             arr.forEach { item ->
                 try {
                     val o = item.asJsonObject
+                    val name = o.stringValue("name")?.trim().orEmpty()
+                    if (name.isBlank()) {
+                        skipped++
+                        errors += "Skipped persona with empty persona name"
+                        return@forEach
+                    }
                     val persona = Persona(
                         id = o.stringValue("id") ?: java.util.UUID.randomUUID().toString(),
-                        name = o.stringValue("name") ?: "Unnamed",
+                        name = name,
                         avatar = o.stringValue("avatar"),
                         description = o.stringValue("description"),
                         role = o.stringValue("role"),
@@ -258,9 +275,12 @@ class ExportImportService(
                     )
                     personaRepository.savePersona(persona)
                     imported++
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    skipped++
+                    errors += e.message ?: "Invalid persona row"
+                }
             }
-            ImportResult(imported, 0)
+            ImportResult(imported, skipped, errors)
         } catch (e: Exception) {
             ImportResult(0, 0, listOf(e.message ?: "Parse error"))
         }

@@ -24,11 +24,15 @@ import com.memorychat.app.domain.model.MemoryType
 import com.memorychat.app.domain.provider.OpenAICompatibleProvider
 import com.memorychat.app.domain.engine.ChatContextWindowConfig
 import com.memorychat.app.domain.engine.ChatContextWindowManager
+import com.memorychat.app.domain.engine.ChatContextWindowResult
+import com.memorychat.app.domain.engine.ContextLengthErrorDetector
 import com.memorychat.app.domain.engine.LlmConversationContextSummarizer
 import com.memorychat.app.domain.engine.MemoryExtractionSaver
 import com.memorychat.app.domain.engine.MemoryExtractionStore
 import com.memorychat.app.domain.engine.MemoryExtractionTriggerPolicy
 import com.memorychat.app.domain.engine.MemoryEngine
+import com.memorychat.app.domain.model.ConversationDebugSnapshot
+import com.memorychat.app.domain.model.DebugMemoryTrace
 import com.memorychat.app.domain.model.Persona
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -371,6 +375,7 @@ class AdbInputReceiver : BroadcastReceiver() {
             ds.saveConversationRollingSummary(conversationId, contextWindow.summary)
             ds.saveConversationRollingSummaryWatermark(conversationId, contextWindow.summaryWatermark)
         }
+        saveDebugSnapshot(ds, conversationId, recall, contextWindow)
 
         val systemPrompt = decorateSystemPrompt(
             basePrompt = basePrompt,
@@ -384,14 +389,56 @@ class AdbInputReceiver : BroadcastReceiver() {
         Log.i("AdbInput", "  System prompt injected (${systemPrompt.length} chars)")
         Log.i("AdbInput", "[3/4] Calling API with ${messages.size} messages (recall=${recall.memories.size}, context=${contextWindow.messages.size})")
 
-        val response = provider.complete(
-            ChatRequest(
-                messages = messages,
-                model = model,
-                stream = false,
-                enableWebSearch = decision.usesWebSearch()
+        val response = try {
+            provider.complete(
+                ChatRequest(
+                    messages = messages,
+                    model = model,
+                    stream = false,
+                    enableWebSearch = decision.usesWebSearch()
+                )
             )
-        )
+        } catch (e: Exception) {
+            if (!ContextLengthErrorDetector.isContextLengthExceeded(e.message)) throw e
+            Log.w("AdbInput", "Context exceeded; compressing and retrying once")
+            val retryContextWindow = ChatContextWindowManager(
+                LlmConversationContextSummarizer(provider, model)
+            ).build(
+                messages = conversationMessages,
+                existingSummary = ds.getConversationRollingSummary(conversationId),
+                summaryWatermark = ds.getConversationRollingSummaryWatermark(conversationId),
+                config = ChatContextWindowConfig(
+                    contextWindowTokens = ds.contextWindowTokens.first(),
+                    maxCompletionTokens = ds.maxTokens.first(),
+                    safetyMarginTokens = ds.safetyMarginTokens.first(),
+                    compressionMessageTurnThreshold = ds.compressionMessageTurnThreshold.first(),
+                    recentMessageCount = 4,
+                    forceCompression = true
+                )
+            )
+            if (retryContextWindow.summaryUpdated) {
+                ds.saveConversationRollingSummary(conversationId, retryContextWindow.summary)
+                ds.saveConversationRollingSummaryWatermark(conversationId, retryContextWindow.summaryWatermark)
+            }
+            saveDebugSnapshot(ds, conversationId, recall, retryContextWindow, retryAfterContextLimit = true)
+            val retrySystemPrompt = decorateSystemPrompt(
+                basePrompt = basePrompt,
+                decision = decision,
+                toolResults = toolResults,
+                appliedActionLines = appliedActionLines,
+                rollingSummary = retryContextWindow.summary
+            )
+            val retryMessages = mutableListOf(ChatMessage(role = "system", content = retrySystemPrompt))
+            retryMessages += retryContextWindow.messages.map { ChatMessage(role = it.role, content = it.content) }
+            provider.complete(
+                ChatRequest(
+                    messages = retryMessages,
+                    model = model,
+                    stream = false,
+                    enableWebSearch = decision.usesWebSearch()
+                )
+            )
+        }
         Log.i("AdbInput", "[4/4] API response: ${response.content.take(80)}")
 
         val assistantCreatedAt = System.currentTimeMillis()
@@ -445,6 +492,36 @@ class AdbInputReceiver : BroadcastReceiver() {
             Log.i("AdbInput", "Extraction skipped: generateMemory=false")
         }
         Log.i("AdbInput", "=== DONE (recall=${recall.memories.size}) ===")
+    }
+
+    private suspend fun saveDebugSnapshot(
+        ds: SettingsDataStore,
+        conversationId: String,
+        recall: MemoryRecallResult,
+        contextWindow: ChatContextWindowResult,
+        retryAfterContextLimit: Boolean = false
+    ) {
+        ds.saveConversationDebugSnapshot(
+            conversationId,
+            ConversationDebugSnapshot(
+                conversationId = conversationId,
+                updatedAt = System.currentTimeMillis(),
+                recallScene = recall.scene,
+                recalledMemories = recall.memories.map { memory ->
+                    DebugMemoryTrace(
+                        id = memory.id,
+                        type = memory.type,
+                        content = memory.content,
+                        reason = recall.reasons[memory.id].orEmpty()
+                    )
+                },
+                contextMessageCount = contextWindow.messages.size,
+                rollingSummary = contextWindow.summary,
+                summaryWatermark = contextWindow.summaryWatermark,
+                summaryUpdated = contextWindow.summaryUpdated,
+                retryAfterContextLimit = retryAfterContextLimit
+            )
+        )
     }
 
     private fun decorateSystemPrompt(
