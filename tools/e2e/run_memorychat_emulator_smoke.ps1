@@ -2,7 +2,7 @@
 param(
     [string]$AdbPath = "adb",
     [string]$DeviceId = "",
-    [string]$ApkPath = "app/build/outputs/apk/debug/MemoryChat-v1.0.67-debug.apk",
+    [string]$ApkPath = "app/build/outputs/apk/debug/MemoryChat-v1.0.68-debug.apk",
     [string]$PackageName = "com.memorychat.app",
     [string]$Receiver = "com.memorychat.app/.AdbInputReceiver",
     [string]$Action = "com.memorychat.app.SEND_MESSAGE",
@@ -25,20 +25,20 @@ function Resolve-RepoPath {
 }
 
 function Get-AdbArgs {
-    param([string[]]$Args)
+    param([string[]]$CommandArgs)
 
     $allArgs = @()
     if (-not [string]::IsNullOrWhiteSpace($DeviceId)) {
         $allArgs += @("-s", $DeviceId)
     }
-    $allArgs += $Args
+    $allArgs += $CommandArgs
     return $allArgs
 }
 
 function Invoke-Adb {
-    param([Parameter(Mandatory = $true)][string[]]$Args)
+    param([Parameter(Mandatory = $true)][string[]]$CommandArgs)
 
-    $fullArgs = Get-AdbArgs -Args $Args
+    $fullArgs = Get-AdbArgs -CommandArgs $CommandArgs
     & $AdbPath @fullArgs
     if ($LASTEXITCODE -ne 0) {
         throw "adb failed with exit code ${LASTEXITCODE}: $($fullArgs -join ' ')"
@@ -66,7 +66,7 @@ function Join-ProcessArguments {
 function Invoke-ProcessBinaryToFile {
     param(
         [Parameter(Mandatory = $true)][string]$FileName,
-        [Parameter(Mandatory = $true)][string[]]$Args,
+        [Parameter(Mandatory = $true)][string[]]$ProcessArgs,
         [Parameter(Mandatory = $true)][string]$OutputPath
     )
 
@@ -77,11 +77,11 @@ function Invoke-ProcessBinaryToFile {
     $psi.RedirectStandardError = $true
 
     if ($psi.PSObject.Properties["ArgumentList"]) {
-        foreach ($arg in $Args) {
+        foreach ($arg in $ProcessArgs) {
             [void]$psi.ArgumentList.Add($arg)
         }
     } else {
-        $psi.Arguments = Join-ProcessArguments -Arguments $Args
+        $psi.Arguments = Join-ProcessArguments -Arguments $ProcessArgs
     }
 
     $proc = [System.Diagnostics.Process]::new()
@@ -99,7 +99,7 @@ function Invoke-ProcessBinaryToFile {
     $proc.WaitForExit()
 
     if ($proc.ExitCode -ne 0) {
-        throw "process failed with exit code $($proc.ExitCode): $FileName $($Args -join ' ')`n$stderr"
+        throw "process failed with exit code $($proc.ExitCode): $FileName $($ProcessArgs -join ' ')`n$stderr"
     }
 }
 
@@ -167,10 +167,10 @@ $logPath = Join-Path -Path $OutDir -ChildPath "memorychat-smoke-logcat.txt"
 
 Write-Host "ADB smoke output: $OutDir"
 Write-Host "Installing APK: $resolvedApkPath"
-Invoke-Adb -Args @("install", "-r", $resolvedApkPath)
+Invoke-Adb -CommandArgs @("install", "-r", $resolvedApkPath)
 
 Write-Host "Starting app package: $PackageName"
-Invoke-Adb -Args @("shell", "monkey", "-p", $PackageName, "-c", "android.intent.category.LAUNCHER", "1")
+Invoke-Adb -CommandArgs @("shell", "monkey", "-p", $PackageName, "-c", "android.intent.category.LAUNCHER", "1")
 
 Write-Host ""
 Write-Host "Manual step required:"
@@ -180,17 +180,26 @@ Write-Host "  3. Do not paste or enter API keys in this terminal."
 [void](Read-Host "Press Enter after the conversation exists")
 
 Write-Host "Exporting app database with run-as..."
-$dbExportArgs = Get-AdbArgs -Args @("exec-out", "run-as", $PackageName, "cat", "databases/memorychat.db")
-Invoke-ProcessBinaryToFile -FileName $AdbPath -Args $dbExportArgs -OutputPath $dbPath
+$dbExportArgs = Get-AdbArgs -CommandArgs @("exec-out", "run-as", $PackageName, "cat", "databases/memorychat.db")
+Invoke-ProcessBinaryToFile -FileName $AdbPath -ProcessArgs $dbExportArgs -OutputPath $dbPath
 if ((Get-Item -LiteralPath $dbPath).Length -le 0) {
     throw "exported database is empty: $dbPath"
+}
+foreach ($sidecarName in @("memorychat.db-wal", "memorychat.db-shm")) {
+    $sidecarPath = Join-Path -Path $OutDir -ChildPath $sidecarName
+    $sidecarCommand = "if [ -f databases/$sidecarName ]; then cat databases/$sidecarName; fi"
+    $sidecarArgs = Get-AdbArgs -CommandArgs @("exec-out", "run-as", $PackageName, "sh", "-c", $sidecarCommand)
+    Invoke-ProcessBinaryToFile -FileName $AdbPath -ProcessArgs $sidecarArgs -OutputPath $sidecarPath
+    if ((Get-Item -LiteralPath $sidecarPath).Length -le 0) {
+        Remove-Item -LiteralPath $sidecarPath -Force
+    }
 }
 
 $conversationId = Invoke-PythonLatestConversationId -DatabasePath $dbPath -WorkDir $OutDir
 Write-Host "Latest conversation id: $conversationId"
 
 Write-Host "Clearing logcat..."
-Invoke-Adb -Args @("logcat", "-c")
+Invoke-Adb -CommandArgs @("logcat", "-c")
 
 Write-Host "Sending smoke message through broadcast receiver..."
 $encodedMessage = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($Message))
@@ -201,13 +210,13 @@ $broadcastCommand = @(
     "--es conv_id $(ConvertTo-ShellSingleQuoted -Value $conversationId)",
     "--es msg_b64 $(ConvertTo-ShellSingleQuoted -Value $encodedMessage)"
 ) -join " "
-Invoke-Adb -Args @("shell", $broadcastCommand)
+Invoke-Adb -CommandArgs @("shell", $broadcastCommand)
 
 Write-Host "Waiting $WaitSeconds seconds for model call and memory recall logs..."
 Start-Sleep -Seconds $WaitSeconds
 
 Write-Host "Exporting related logcat..."
-$logcatArgs = Get-AdbArgs -Args @(
+$logcatArgs = Get-AdbArgs -CommandArgs @(
     "logcat",
     "-d",
     "-v",
@@ -219,19 +228,19 @@ $logcatArgs = Get-AdbArgs -Args @(
     "AndroidRuntime:E",
     "*:S"
 )
-& $AdbPath @logcatArgs 2>&1 | Set-Content -LiteralPath $logPath -Encoding UTF8
-if ($LASTEXITCODE -ne 0) {
-    throw "adb logcat export failed with exit code $LASTEXITCODE"
-}
+Invoke-ProcessBinaryToFile -FileName $AdbPath -ProcessArgs $logcatArgs -OutputPath $logPath
 
 $logText = Get-Content -LiteralPath $logPath -Raw
-if ($logText -match "AdbInput\\(.*\\): Error:" -or
-    $logText -match "LlmProvider\\(.*\\): complete\\(\\) failed" -or
+if ($logText -match "API key is empty") {
+    throw "smoke failed: API key is empty in app settings; configure real-model settings before running this smoke"
+}
+if ($logText -match "AdbInput\(.*\): Error:" -or
+    $logText -match "LlmProvider\(.*\): complete\(\) failed" -or
     $logText -match "Unable to resolve host" -or
-    $logText -match "HTTP \\d{3}") {
+    $logText -match "HTTP \d{3}") {
     throw "smoke failed: model/network error found in $logPath"
 }
-if ($logText -notmatch "\\[4/4\\] API response" -or $logText -notmatch "=== DONE") {
+if ($logText -notmatch "\[4/4\] API response" -or $logText -notmatch "=== DONE") {
     throw "smoke failed: missing successful API response or completion marker in $logPath"
 }
 

@@ -1,5 +1,28 @@
 # MemoryChat Development Log
 
+## v1.0.68 (2026-06-17)
+
+### Changes
+- Fixed `tools/e2e/run_memorychat_emulator_smoke.ps1` so PowerShell helper functions no longer use the reserved automatic `$Args` variable name; ADB commands now preserve subcommands such as `install`, `logcat`, and `exec-out`
+- Fixed the same smoke script to export Room's `memorychat.db-wal` and `memorychat.db-shm` sidecar files when present, so latest conversations can be read from a live app database
+- Fixed the smoke script logcat export and PowerShell regex checks so existing `[4/4] API response` / `=== DONE` markers are detected correctly
+- Updated the emulator smoke script default APK path to v1.0.68
+
+### Verification
+- PASS: `.\gradlew.bat assembleDebug`
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat connectedDebugAndroidTest`
+- PASS: copied ignored `local.properties` from the main checkout into this worktree, rebuilt Debug, and confirmed `BuildConfig.DEFAULT_API_KEY` is non-empty without printing the key
+- PASS: ADB launch/UI smoke on `emulator-5554` confirmed `MemoryChat` and `New Chat` in UI tree with an empty crash buffer
+- PASS: UI-driven real-model smoke on `emulator-5554` sent `ReplyOK`; logs showed agent decision, recall, stream connect, SSE DONE, DB save, and memory extraction deferral
+- PASS: after `pm clear com.memorychat.app` and creating a clean conversation, `.\tools\e2e\run_memorychat_emulator_smoke.ps1 -AdbPath 'C:\Android\android-sdk\platform-tools\adb.exe' -DeviceId emulator-5554 -WaitSeconds 60` installed/launched the APK, exported the live Room database with WAL sidecars, found the latest conversation, sent the ADB broadcast, and verified `[4/4] API response` plus `=== DONE`
+- NOTE: repeated install-over-existing-data runs can fail if the emulator contains a DB from another branch/schema version (`user_version=2` vs this branch's Room schema `version=1`); clean emulator app data was required for this branch smoke
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.68-debug.apk`
+
+---
+
 ## v1.0.67 (2026-06-17)
 
 ### Changes
