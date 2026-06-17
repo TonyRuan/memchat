@@ -1,5 +1,23 @@
 # MemoryChat Development Log
 
+## v1.0.64 (2026-06-17)
+
+### Changes
+- Updated the built-in MiMo API defaults to use `https://token-plan-cn.xiaomimimo.com/v1` with `mimo-v2.5`
+- Added `ApiConfigDefaults` so the default base URL and model are covered by unit tests
+- Configured the local debug default API key through ignored `local.properties`; the key is not committed
+- Updated the emulator smoke script default APK path to v1.0.64
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.data.local.datastore.ApiKeyDefaultsTest.defaultApiEndpointUsesTokenPlanMimoV25"` (RED failed before implementation, then passed)
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.64-debug.apk`
+
+---
+
 ## Docs (2026-06-05)
 
 ### Changes

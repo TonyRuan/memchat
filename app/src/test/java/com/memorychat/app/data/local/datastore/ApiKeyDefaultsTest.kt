@@ -43,4 +43,10 @@ class ApiKeyDefaultsTest {
 
         assertEquals("stored-key", resolved)
     }
+
+    @Test
+    fun defaultApiEndpointUsesTokenPlanMimoV25() {
+        assertEquals("https://token-plan-cn.xiaomimimo.com/v1", ApiConfigDefaults.BASE_URL)
+        assertEquals("mimo-v2.5", ApiConfigDefaults.MODEL_NAME)
+    }
 }

@@ -24,6 +24,11 @@ object ApiKeyDefaults {
     }
 }
 
+object ApiConfigDefaults {
+    const val BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1"
+    const val MODEL_NAME = "mimo-v2.5"
+}
+
 class SettingsDataStore(private val context: Context) {
     companion object {
         val PROVIDER_TYPE = stringPreferencesKey("provider_type")
@@ -56,8 +61,8 @@ class SettingsDataStore(private val context: Context) {
     )
 
     val providerType: Flow<String> = context.dataStore.data.map { it[PROVIDER_TYPE] ?: "mimo" }
-    val baseUrl: Flow<String> = context.dataStore.data.map { it[BASE_URL] ?: "https://api.xiaomimimo.com/v1" }
-    val modelName: Flow<String> = context.dataStore.data.map { it[MODEL_NAME] ?: "mimo-v2.5" }
+    val baseUrl: Flow<String> = context.dataStore.data.map { it[BASE_URL] ?: ApiConfigDefaults.BASE_URL }
+    val modelName: Flow<String> = context.dataStore.data.map { it[MODEL_NAME] ?: ApiConfigDefaults.MODEL_NAME }
     val defaultUseMemory: Flow<Boolean> = context.dataStore.data.map { it[DEFAULT_USE_MEMORY] ?: true }
     val defaultGenerateMemory: Flow<Boolean> = context.dataStore.data.map { it[DEFAULT_GENERATE_MEMORY] ?: true }
     val defaultPersonaId: Flow<String> = context.dataStore.data.map { it[DEFAULT_PERSONA_ID] ?: "" }
