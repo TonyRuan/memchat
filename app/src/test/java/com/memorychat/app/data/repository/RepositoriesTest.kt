@@ -403,6 +403,35 @@ class RepositoriesTest {
     }
 
     @Test
+    fun importMemoriesJsonPreservesTimestampMetadata() = runBlocking {
+        val memoryDao = FakeMemoryDao()
+        val service = ExportImportService(MemoryRepository(memoryDao, FakeMemoryTombstoneDao()), PersonaRepository(FakePersonaDao()))
+        val json = """
+            {
+              "version": "1.0",
+              "memories": [
+                {
+                  "id": "m-time",
+                  "type": "project",
+                  "content": "第一阶段优先验证记忆系统",
+                  "created_at": 1000,
+                  "updated_at": 2000,
+                  "last_used_at": 3000
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val result = service.importMemoriesJson(json)
+        val memory = memoryDao.getById("m-time")
+
+        assertEquals(1, result.imported)
+        assertEquals(1_000L, memory?.createdAt)
+        assertEquals(2_000L, memory?.updatedAt)
+        assertEquals(3_000L, memory?.lastUsedAt)
+    }
+
+    @Test
     fun importMemoriesJsonSkipsInvalidRowsWithoutCrashing() = runBlocking {
         val memoryDao = FakeMemoryDao()
         val service = ExportImportService(MemoryRepository(memoryDao, FakeMemoryTombstoneDao()), PersonaRepository(FakePersonaDao()))
@@ -511,6 +540,29 @@ class RepositoriesTest {
 
         assertEquals(1, memories.size())
         assertEquals("active", memories[0].asJsonObject.get("id").asString)
+    }
+
+    @Test
+    fun exportMemoriesMarkdownIncludesTimestampMetadata() = runBlocking {
+        val memoryDao = FakeMemoryDao().apply {
+            insert(MemoryEntity(
+                id = "active",
+                type = MemoryType.PROJECT.name,
+                content = "第一阶段优先验证记忆系统",
+                status = MemoryStatus.ACTIVE.name,
+                createdAt = 1_000L,
+                updatedAt = 2_000L,
+                lastUsedAt = 3_000L
+            ))
+        }
+        val service = ExportImportService(MemoryRepository(memoryDao, FakeMemoryTombstoneDao()), PersonaRepository(FakePersonaDao()))
+
+        val markdown = service.exportMemoriesMarkdown()
+
+        assertTrue(markdown.contains("created_at=1970-01-01T00:00:01Z"))
+        assertTrue(markdown.contains("updated_at=1970-01-01T00:00:02Z"))
+        assertTrue(markdown.contains("last_used_at=1970-01-01T00:00:03Z"))
+        assertTrue(markdown.contains("第一阶段优先验证记忆系统"))
     }
 
     private class FakeConversationDao : ConversationDao {

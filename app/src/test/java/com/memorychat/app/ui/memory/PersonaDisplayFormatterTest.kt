@@ -1,8 +1,12 @@
 package com.memorychat.app.ui.memory
 
+import com.memorychat.app.domain.model.Memory
+import com.memorychat.app.domain.model.MemoryStatus
+import com.memorychat.app.domain.model.MemoryType
 import com.memorychat.app.domain.model.Persona
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.util.TimeZone
 
 class PersonaDisplayFormatterTest {
     @Test
@@ -66,6 +70,58 @@ class PersonaDisplayFormatterTest {
         assertEquals(
             listOf("先说结论", "不确定时说明"),
             PersonaDisplayFormatter.parseListField("先说结论；不确定时说明")
+        )
+    }
+
+    @Test
+    fun formatsMemoryTimestampFieldsForDisplay() {
+        val memory = Memory(
+            id = "m1",
+            type = MemoryType.PROJECT,
+            content = "第一阶段优先验证记忆系统",
+            status = MemoryStatus.ACTIVE,
+            createdAt = 0L,
+            updatedAt = 60_000L,
+            lastUsedAt = 120_000L
+        )
+
+        val fields = MemoryDisplayFormatter.timestampFields(
+            memory,
+            timeZone = TimeZone.getTimeZone("UTC")
+        )
+
+        assertEquals(
+            listOf(
+                "创建" to "1970-01-01 00:00",
+                "更新" to "1970-01-01 00:01",
+                "使用" to "1970-01-01 00:02"
+            ),
+            fields
+        )
+    }
+
+    @Test
+    fun omitsMissingLastUsedTimestampForDisplay() {
+        val memory = Memory(
+            id = "m1",
+            type = MemoryType.PROJECT,
+            content = "第一阶段优先验证记忆系统",
+            status = MemoryStatus.ACTIVE,
+            createdAt = 0L,
+            updatedAt = 60_000L
+        )
+
+        val fields = MemoryDisplayFormatter.timestampFields(
+            memory,
+            timeZone = TimeZone.getTimeZone("UTC")
+        )
+
+        assertEquals(
+            listOf(
+                "创建" to "1970-01-01 00:00",
+                "更新" to "1970-01-01 00:01"
+            ),
+            fields
         )
     }
 }

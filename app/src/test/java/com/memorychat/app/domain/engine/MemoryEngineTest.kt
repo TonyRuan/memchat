@@ -179,6 +179,31 @@ class MemoryEngineTest {
     }
 
     @Test
+    fun buildRecallPromptIncludesMemoryTimestamps() {
+        val prompt = MemoryEngine.buildRecallPrompt(
+            persona = null,
+            preferences = listOf(
+                memory(
+                    id = "pref-time",
+                    type = MemoryType.PREFERENCE,
+                    content = "回答先给结论",
+                    createdAt = 1_000L,
+                    updatedAt = 2_000L,
+                    lastUsedAt = 3_000L
+                )
+            ),
+            profile = emptyList(),
+            projects = emptyList(),
+            summaries = emptyList()
+        )
+
+        assertTrue(prompt.contains("created_at=1970-01-01T00:00:01Z"))
+        assertTrue(prompt.contains("updated_at=1970-01-01T00:00:02Z"))
+        assertTrue(prompt.contains("last_used_at=1970-01-01T00:00:03Z"))
+        assertTrue(prompt.contains("content=回答先给结论"))
+    }
+
+    @Test
     fun extractionPromptIncludesExistingMemoryIdsForModelUpdates() = runTest {
         val provider = FakeLlmProvider(completeResponses = listOf("""{"new_memories":[]}"""))
         val engine = MemoryEngine(provider, "fake-model")
@@ -191,12 +216,19 @@ class MemoryEngineTest {
                 )
             ),
             existingMemories = listOf(
-                memory("memory-1047", MemoryType.PROJECT, "通信机型号是 COM-1047")
+                memory(
+                    "memory-1047",
+                    MemoryType.PROJECT,
+                    "通信机型号是 COM-1047",
+                    createdAt = 1_000L,
+                    updatedAt = 2_000L,
+                    lastUsedAt = 3_000L
+                )
             )
         )
 
         val prompt = provider.completeRequests.single().messages.single().content
-        assertTrue(prompt.contains("- id=memory-1047 type=PROJECT user_edited=false content=通信机型号是 COM-1047"))
+        assertTrue(prompt.contains("- id=memory-1047 type=PROJECT user_edited=false created_at=1970-01-01T00:00:01Z updated_at=1970-01-01T00:00:02Z last_used_at=1970-01-01T00:00:03Z content=通信机型号是 COM-1047"))
         assertTrue(prompt.contains("Use updates when new information refines or expands an existing memory"))
         assertTrue(prompt.contains("mission, expertise, communication style, tool policy, memory policy, example dialogues"))
     }
@@ -205,14 +237,20 @@ class MemoryEngineTest {
         id: String,
         type: MemoryType,
         content: String,
-        importance: Int = 3
+        importance: Int = 3,
+        createdAt: Long = System.currentTimeMillis(),
+        updatedAt: Long = createdAt,
+        lastUsedAt: Long? = null
     ): Memory {
         return Memory(
             id = id,
             type = type,
             content = content,
             status = MemoryStatus.ACTIVE,
-            importance = importance
+            importance = importance,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+            lastUsedAt = lastUsedAt
         )
     }
 

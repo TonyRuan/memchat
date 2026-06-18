@@ -250,7 +250,10 @@ class AgentToolExecutorTest {
                 id = "fault-detail",
                 type = MemoryType.PROJECT,
                 content = "电机故障详情通过 INFO22 字段展示，调试时要优先核对原始帧",
-                importance = 2
+                importance = 2,
+                createdAt = 1_000L,
+                updatedAt = 2_000L,
+                lastUsedAt = 3_000L
             )
         )
         val executor = AgentToolExecutor(FakePersonaStore(), memoryStore) { 1_717_171_717_000L }
@@ -274,6 +277,9 @@ class AgentToolExecutorTest {
         assertTrue(result.toolResults.single().contains("fault-detail"))
         assertTrue(result.toolResults.single().contains("INFO22"))
         assertTrue(result.toolResults.single().contains("query match"))
+        assertTrue(result.toolResults.single().contains("created_at=1970-01-01T00:00:01Z"))
+        assertTrue(result.toolResults.single().contains("updated_at=1970-01-01T00:00:02Z"))
+        assertTrue(result.toolResults.single().contains("last_used_at=1970-01-01T00:00:03Z"))
     }
 
     @Test

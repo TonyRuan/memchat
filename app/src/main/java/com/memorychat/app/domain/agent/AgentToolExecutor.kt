@@ -12,6 +12,7 @@ import com.memorychat.app.domain.model.ConversationHistoryMatch
 import com.memorychat.app.domain.model.HistorySearchScope
 import com.memorychat.app.domain.model.MemoryCandidate
 import com.memorychat.app.domain.model.MemoryExtractionResult
+import com.memorychat.app.domain.model.MemoryMetadataFormatter
 import com.memorychat.app.domain.model.MemoryQuery
 import com.memorychat.app.domain.model.MemoryRecallResult
 import com.memorychat.app.domain.model.MemoryStatus
@@ -237,6 +238,7 @@ class AgentToolExecutor(
                 appendLine()
                 append("- id=${memory.id.safeToolText(80)}")
                 append(" type=${memory.type.name}")
+                append(" ${MemoryMetadataFormatter.timestampMetadata(memory)}")
                 append(" reason=\"${recall.reasons[memory.id].orEmpty().safeToolText(120)}\"")
                 append(" content=\"${memory.content.safeToolText(240)}\"")
             }

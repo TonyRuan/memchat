@@ -372,7 +372,7 @@ class ExportImportService(
 
         memories.groupBy { it.type }.forEach { (type, list) ->
             sb.appendLine("## ${type.name}")
-            list.forEach { sb.appendLine("- ${it.content}") }
+            list.forEach { sb.appendLine("- ${MemoryMetadataFormatter.timestampMetadata(it)} content=${it.content}") }
             sb.appendLine()
         }
         return sb.toString()
@@ -415,13 +415,17 @@ class ExportImportService(
                         return@forEach
                     }
 
+                    val importedAt = System.currentTimeMillis()
                     val memory = Memory(
                         id = o.get("id")?.asString ?: java.util.UUID.randomUUID().toString(),
                         type = type,
                         content = content,
                         status = status,
                         importance = o.get("importance")?.asInt ?: 3,
-                        confidence = o.get("confidence")?.asFloat ?: 0.8f
+                        confidence = o.get("confidence")?.asFloat ?: 0.8f,
+                        createdAt = o.longValue("created_at", "createdAt") ?: importedAt,
+                        updatedAt = o.longValue("updated_at", "updatedAt") ?: importedAt,
+                        lastUsedAt = o.longValue("last_used_at", "lastUsedAt")
                     )
                     memoryRepository.insert(memory)
                     imported++

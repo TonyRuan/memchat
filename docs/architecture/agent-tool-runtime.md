@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-截至 `v1.0.71`，MemoryChat 已有一套轻量的 Agent 工具运行时。它不是运行时动态安装的 skill 系统，而是编译进 APK 的静态工具集合：
+截至 `v1.0.72`，MemoryChat 已有一套轻量的 Agent 工具运行时。它不是运行时动态安装的 skill 系统，而是编译进 APK 的静态工具集合：
 
 - 能力清单写在 `AgentDecisionEngine` 的路由 prompt 里。
 - 允许调用的工具名写在 `AgentDecisionEngine.allowedTools` 白名单里。
@@ -47,7 +47,7 @@ MemoryChat 第一阶段不做复杂多 Agent，而是做本地 Runtime：LLM 负
   - 按模型给出的 `query`、可选 `types` 和 `limit` 读取 active 长期记忆。
   - 当前会话关闭 `useMemory` 时直接跳过，不读取长期记忆。
   - 显式工具召回只返回 query 命中的记忆，不使用场景/重要性兜底；自动聊天记忆注入仍保留场景兜底。
-  - 复用 `MemoryRecallEngine` 的 query 相关性排序和 reason 生成，结果脱敏、截断并只回填当前回答上下文。
+  - 复用 `MemoryRecallEngine` 的 query 相关性排序和 reason 生成，结果带 `created_at`、`updated_at` 和可选 `last_used_at`，再脱敏、截断并只回填当前回答上下文。
 - `search_history`
   - 按模型给出的 `query`、`scope=current|all` 和 `limit` 检索历史会话消息。
   - 使用当前用户消息的 `createdAt` 作为 `beforeCreatedAt` 水位，避免把本回合刚落库的问题搜回自身。
@@ -164,7 +164,7 @@ AgentFinalAnswerPolicy 判断是否可直接确认
 - “你叫真机露露” 更新 Persona。
 - “你叫我真机大王吧” 不改 Persona，只写用户称呼偏好。
 - “记住真机防重复编号是 AGENT-1056” 只落一条长期记忆。
-- `recall_memory` 可按 query 返回具体长期记忆内容和召回原因。
+- `recall_memory` 可按 query 返回具体长期记忆内容、召回原因和记忆时间戳。
 - `recall_memory` 在 `useMemory=false` 时跳过，且显式工具查询不会召回无 query 命中的高重要记忆。
 - `search_history` 可按 query 从当前或跨会话历史消息中返回有限、脱敏、可溯源的原文片段，并排除当前回合用户消息。
 - 联网搜索请求可触发 provider 的 web search，并在聊天页显示工具轨迹。

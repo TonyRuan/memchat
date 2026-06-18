@@ -369,6 +369,12 @@ fun MemoryCard(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(memory.content, style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = MemoryDisplayFormatter.timestampLine(memory),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {

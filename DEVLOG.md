@@ -1,5 +1,27 @@
 # MemoryChat Development Log
 
+## v1.0.72 (2026-06-18)
+
+### Changes
+- Added ISO-8601 timestamp metadata to long-term memory prompt injection, including `created_at`, `updated_at`, and optional `last_used_at`
+- Added the same timestamp metadata to `recall_memory` tool results so agents can reason about recency and conflicts
+- Preserved memory timestamp metadata during JSON import, accepting both snake_case and camelCase timestamp fields
+- Added timestamp metadata to Markdown memory export
+- Displayed memory creation/update/last-used timestamps in Memory Center cards
+- Updated Agent tool runtime documentation and emulator smoke script default APK path to v1.0.72
+- Hardened the emulator smoke script title check against PowerShell/Python Unicode encoding issues
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.MemoryEngineTest" --tests "com.memorychat.app.domain.agent.AgentToolExecutorTest" --tests "com.memorychat.app.data.repository.RepositoriesTest" --tests "com.memorychat.app.ui.memory.PersonaDisplayFormatterTest"` (RED compile failure before implementation, then passed)
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+- PASS: `.\tools\e2e\run_memorychat_emulator_smoke.ps1 -DeviceId emulator-5554 -WaitSeconds 90` installed `MemoryChat-v1.0.72-debug.apk`, verified logcat `[4/4] API response` and `=== DONE`, exported DB copies, and confirmed conversation title auto-update after fixing script-side Unicode title decoding
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.72-debug.apk`
+
+---
+
 ## v1.0.71 (2026-06-18)
 
 ### Changes

@@ -1,6 +1,11 @@
 package com.memorychat.app.ui.memory
 
+import com.memorychat.app.domain.model.Memory
 import com.memorychat.app.domain.model.Persona
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 object PersonaDisplayFormatter {
     fun fields(persona: Persona): List<Pair<String, String>> {
@@ -38,5 +43,26 @@ object PersonaDisplayFormatter {
             .split(Regex("\\n\\s*\\n"))
             .map { it.trim() }
             .filter { it.isNotBlank() }
+    }
+}
+
+object MemoryDisplayFormatter {
+    fun timestampFields(
+        memory: Memory,
+        timeZone: TimeZone = TimeZone.getDefault(),
+        locale: Locale = Locale.getDefault()
+    ): List<Pair<String, String>> {
+        val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm", locale).apply {
+            this.timeZone = timeZone
+        }
+        return buildList {
+            add("创建" to formatter.format(Date(memory.createdAt)))
+            add("更新" to formatter.format(Date(memory.updatedAt)))
+            memory.lastUsedAt?.let { add("使用" to formatter.format(Date(it))) }
+        }
+    }
+
+    fun timestampLine(memory: Memory): String {
+        return timestampFields(memory).joinToString("  ") { (label, value) -> "$label: $value" }
     }
 }

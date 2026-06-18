@@ -2,7 +2,7 @@
 param(
     [string]$AdbPath = "adb",
     [string]$DeviceId = "",
-    [string]$ApkPath = "app/build/outputs/apk/debug/MemoryChat-v1.0.71-debug.apk",
+    [string]$ApkPath = "app/build/outputs/apk/debug/MemoryChat-v1.0.72-debug.apk",
     [string]$PackageName = "com.memorychat.app",
     [string]$Receiver = "com.memorychat.app/.AdbInputReceiver",
     [string]$Action = "com.memorychat.app.SEND_MESSAGE",
@@ -140,14 +140,15 @@ function Get-LocalConversationTitle {
     param([Parameter(Mandatory = $true)][string]$Value)
 
     $normalized = [regex]::Replace($Value, "\s+", " ").Trim()
-    $normalized = $normalized.Trim([char[]]@("。", ".", "，", ",", "！", "!", "？", "?", ":", "：", '"', "'", "“", "”"))
+    $trimChars = [char[]]@(0x3002, 0x002e, 0xff0c, 0x002c, 0xff01, 0x0021, 0xff1f, 0x003f, 0x003a, 0xff1a, 0x0022, 0x0027, 0x201c, 0x201d)
+    $normalized = $normalized.Trim($trimChars)
     if ([string]::IsNullOrWhiteSpace($normalized)) {
         return "新会话"
     }
     if ($normalized.Length -le 16) {
         return $normalized
     }
-    return $normalized.Substring(0, 16) + "…"
+    return $normalized.Substring(0, 16) + [string][char]0x2026
 }
 
 function Invoke-PythonLatestConversationId {
@@ -201,6 +202,7 @@ function Invoke-PythonConversationTitle {
     @'
 import sqlite3
 import sys
+import base64
 
 db_path = sys.argv[1]
 conversation_id = sys.argv[2]
@@ -217,7 +219,7 @@ if not row:
     print(f"Conversation not found: {conversation_id}", file=sys.stderr)
     sys.exit(2)
 
-print(row[0])
+print(base64.b64encode(row[0].encode("utf-8")).decode("ascii"))
 '@ | Set-Content -LiteralPath $queryScript -Encoding UTF8
 
     $output = & $PythonPath $queryScript $DatabasePath $ConversationId 2>&1
@@ -229,7 +231,7 @@ print(row[0])
     if ($null -eq $title) {
         return ""
     }
-    return [string]$title
+    return [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]$title))
 }
 
 $resolvedApkPath = Resolve-RepoPath -Path $ApkPath
