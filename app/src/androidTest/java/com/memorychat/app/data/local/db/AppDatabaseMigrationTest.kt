@@ -5,6 +5,9 @@ import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.memorychat.app.data.repository.PersonaRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -142,12 +145,13 @@ class AppDatabaseMigrationTest {
             """.trimIndent()
         ).use { cursor ->
             assertTrue(cursor.moveToFirst())
-            assertEquals("帮助用户把想法推进成可验证的产品和工程改动", cursor.getString(0))
-            assertTrue(cursor.getString(1).contains("Agent 工具协作"))
-            assertTrue(cursor.getString(2).contains("先给结论"))
-            assertTrue(cursor.getString(3).contains("主动使用可用工具"))
-            assertTrue(cursor.getString(4).contains("只写入 Persona"))
-                assertTrue(cursor.getString(5).contains("技术伙伴"))
+            val defaultPersona = PersonaRepository.createDefaultPersona()
+            assertEquals(defaultPersona.mission, cursor.getString(0))
+            assertEquals(defaultPersona.expertise, cursor.getStringList(1))
+            assertEquals(defaultPersona.communicationStyle, cursor.getString(2))
+            assertEquals(defaultPersona.toolPolicy, cursor.getStringList(3))
+            assertEquals(defaultPersona.memoryPolicy, cursor.getStringList(4))
+            assertEquals(defaultPersona.exampleDialogues, cursor.getStringList(5))
         }
         db.query(
             """
@@ -157,9 +161,10 @@ class AppDatabaseMigrationTest {
             """.trimIndent()
         ).use { cursor ->
             assertTrue(cursor.moveToFirst())
-            assertEquals("帮助用户把想法推进成可验证的产品和工程改动", cursor.getString(0))
-            assertTrue(cursor.getString(1).contains("主动使用可用工具"))
-            assertTrue(cursor.getString(2).contains("只写入 Persona"))
+            val defaultPersona = PersonaRepository.createDefaultPersona()
+            assertEquals(defaultPersona.mission, cursor.getString(0))
+            assertEquals(defaultPersona.toolPolicy, cursor.getStringList(1))
+            assertEquals(defaultPersona.memoryPolicy, cursor.getStringList(2))
         }
         room.close()
         context.deleteDatabase(TEST_DB)
@@ -175,6 +180,11 @@ class AppDatabaseMigrationTest {
             "memoryPolicyJson",
             "exampleDialoguesJson"
         )
+        val gson = Gson()
+
+        fun android.database.Cursor.getStringList(index: Int): List<String> {
+            return gson.fromJson(getString(index), object : TypeToken<List<String>>() {}.type)
+        }
 
         fun createVersion1Database(context: Context): SQLiteDatabase {
             val path = context.getDatabasePath(TEST_DB)

@@ -1,5 +1,27 @@
 # MemoryChat Development Log
 
+## v1.0.69 (2026-06-18)
+
+### Changes
+- 将内置默认 Persona 调整为“求真助手”，定位为实事求是、重视证据和验证边界的聊天助手
+- 默认 Persona Contract 强化了事实/推测/建议分离、不确定性说明、核查路径、高风险边界、工具验证策略和记忆写入边界
+- `getOrCreateDefaultPersona()` 会把仍保持内置默认且未编辑过的旧 `技术伙伴` 自动升级为 `求真助手`
+- 用户已经改名或编辑过的默认 Persona 不会被本次内置默认升级覆盖
+- 更新 Room v1 -> v2 迁移回填内容，让旧库首次升级也得到同一套实事求是默认人格
+- 更新 emulator smoke 脚本默认 APK 路径到 v1.0.69
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.data.repository.RepositoriesTest.getOrCreateDefaultPersonaCreatesSeedWhenMissing" --tests "com.memorychat.app.data.repository.RepositoriesTest.getOrCreateDefaultPersonaUpgradesBundledDefaultPersona" --tests "com.memorychat.app.data.repository.RepositoriesTest.getOrCreateDefaultPersonaDoesNotOverwriteUserEditedDefaultPersona" --tests "com.memorychat.app.data.repository.RepositoriesTest.getOrCreateDefaultPersonaDoesNotOverwriteEditedDefaultWithLegacyName"` (RED failed before implementation, then passed)
+- PASS: `.\gradlew.bat "-Pandroid.testInstrumentationRunnerArguments.class=com.memorychat.app.data.local.db.AppDatabaseMigrationTest" connectedDebugAndroidTest`，迁移回填 JSON 与 `PersonaRepository.createDefaultPersona()` 精确对齐
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+- PASS: clean install on `emulator-5554`, launched app, exported Room DB with WAL/SHM, verified `user_version=2` and default Persona `persona_default` is `求真助手` with role, mission, communication style, behavior rules, boundaries, tool policy, memory policy, and example dialogues populated
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.69-debug.apk`
+
+---
+
 ## v1.0.68 (2026-06-18)
 
 ### Changes

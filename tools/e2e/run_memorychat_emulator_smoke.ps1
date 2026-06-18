@@ -2,7 +2,7 @@
 param(
     [string]$AdbPath = "adb",
     [string]$DeviceId = "",
-    [string]$ApkPath = "app/build/outputs/apk/debug/MemoryChat-v1.0.68-debug.apk",
+    [string]$ApkPath = "app/build/outputs/apk/debug/MemoryChat-v1.0.69-debug.apk",
     [string]$PackageName = "com.memorychat.app",
     [string]$Receiver = "com.memorychat.app/.AdbInputReceiver",
     [string]$Action = "com.memorychat.app.SEND_MESSAGE",

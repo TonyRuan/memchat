@@ -82,9 +82,95 @@ class RepositoriesTest {
         val persona = repo.getOrCreateDefaultPersona()
 
         assertEquals("persona_default", persona.id)
-        assertEquals("技术伙伴", persona.name)
+        assertEquals("求真助手", persona.name)
+        assertEquals("实事求是的聊天助手", persona.role)
+        assertEquals("帮助用户把问题说清楚，把事实、推测和建议分开，并给出可验证的下一步", persona.mission)
+        assertTrue(persona.communicationStyle?.contains("区分已知事实、合理推测和待验证项") == true)
+        assertTrue(persona.behaviorRules.any { it.contains("不确定时直接说明") })
+        assertTrue(persona.boundaries.any { it.contains("不把未经验证的信息说成确定结论") })
         assertTrue(persona.isDefault)
         assertEquals("persona_default", personaDao.getDefault()?.id)
+    }
+
+    @Test
+    fun getOrCreateDefaultPersonaUpgradesBundledDefaultPersona() = runBlocking {
+        val personaDao = FakePersonaDao().apply {
+            insert(
+                PersonaEntity(
+                    id = "persona_default",
+                    name = "技术伙伴",
+                    description = "适合产品讨论、技术协作的默认人格",
+                    role = "技术协作者",
+                    mission = "帮助用户把想法推进成可验证的产品和工程改动",
+                    expertiseJson = """["Android 应用","长期记忆系统","Agent 工具协作","测试验证"]""",
+                    tone = "直接、清晰、有见地",
+                    communicationStyle = "先给结论，再给关键依据和下一步；避免空泛安慰",
+                    behaviorRulesJson = """["漏指令立即补全","结论先行再展开","必要时引用参考","不确定时直接说明"]""",
+                    boundariesJson = """["不要假装知道不确定的信息","不要在无偏好的时候硬编偏好"]""",
+                    toolPolicyJson = """["需要实时信息、外部资料或真实验证时主动使用可用工具","本地状态可验证时优先读真实数据"]""",
+                    memoryPolicyJson = """["助手人格设置只写入 Persona，不写入长期记忆","用户资料、偏好和项目事实写入 Memory"]""",
+                    isDefault = 1,
+                    createdAt = 100,
+                    updatedAt = 100
+                )
+            )
+        }
+        val repo = PersonaRepository(personaDao)
+
+        val persona = repo.getOrCreateDefaultPersona()
+
+        assertEquals("求真助手", persona.name)
+        assertEquals("实事求是的聊天助手", persona.role)
+        assertTrue(persona.behaviorRules.any { it.contains("事实、推测、建议分开") })
+        assertEquals("求真助手", personaDao.getById("persona_default")?.name)
+    }
+
+    @Test
+    fun getOrCreateDefaultPersonaDoesNotOverwriteUserEditedDefaultPersona() = runBlocking {
+        val personaDao = FakePersonaDao().apply {
+            insert(
+                PersonaEntity(
+                    id = "persona_default",
+                    name = "验证桃子",
+                    role = "用户自定义助手",
+                    mission = "按用户自定义方式协作",
+                    isDefault = 1,
+                    createdAt = 100,
+                    updatedAt = 200
+                )
+            )
+        }
+        val repo = PersonaRepository(personaDao)
+
+        val persona = repo.getOrCreateDefaultPersona()
+
+        assertEquals("验证桃子", persona.name)
+        assertEquals("用户自定义助手", persona.role)
+        assertEquals("按用户自定义方式协作", persona.mission)
+    }
+
+    @Test
+    fun getOrCreateDefaultPersonaDoesNotOverwriteEditedDefaultWithLegacyName() = runBlocking {
+        val personaDao = FakePersonaDao().apply {
+            insert(
+                PersonaEntity(
+                    id = "persona_default",
+                    name = "技术伙伴",
+                    role = "用户已调整的技术助手",
+                    mission = "按用户保留的旧名称协作",
+                    isDefault = 1,
+                    createdAt = 100,
+                    updatedAt = 200
+                )
+            )
+        }
+        val repo = PersonaRepository(personaDao)
+
+        val persona = repo.getOrCreateDefaultPersona()
+
+        assertEquals("技术伙伴", persona.name)
+        assertEquals("用户已调整的技术助手", persona.role)
+        assertEquals("按用户保留的旧名称协作", persona.mission)
     }
 
     @Test
