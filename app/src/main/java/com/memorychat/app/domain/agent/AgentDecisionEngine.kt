@@ -77,6 +77,7 @@ Allowed tools:
 - search_docs: read app/project documentation for this answer only.
 - web_search: search the live web for current public information using the model provider's built-in search tool.
 - recall_memory: request relevant long-term memories when needed.
+- search_history: search prior conversation messages when the user asks about previous discussions or when long-term memory lacks raw details.
 - update_persona: update the assistant persona name, role, mission, expertise, tone, communication style, behavior rules, boundaries, tool policy, memory policy, or example dialogues.
 - save_memory: save a stable long-term user/profile/project/preference fact.
 - set_user_addressing_preference: save how the user wants the assistant to address them. Never update assistant persona for this.
@@ -89,6 +90,8 @@ Rules:
 - Only include update_persona fields that the user explicitly changed. Leave unchanged fields null or empty; do not echo current persona fields.
 - For persona list fields that the user explicitly changed, return the full final desired list. To add one item, include existing kept items plus the new item; to replace, omit old items.
 - Document search results are temporary context and must not become long-term memory unless the user explicitly asks to remember the conclusion.
+- History search results are temporary raw snippets and must not become long-term memory unless the user explicitly asks to remember a stable conclusion.
+- Use search_history for "之前", "上次", "我们聊过", "继续之前", "previously", "last time", "what did we discuss", or similar cross-turn context requests.
 - Return strict JSON only.
 
 JSON schema:
@@ -98,6 +101,8 @@ JSON schema:
     {"name": "save_memory", "arguments": {"type": "profile|preference|project|summary", "content": "...", "importance": 3, "confidence": 0.8}},
     {"name": "set_user_addressing_preference", "arguments": {"addressing": "..."}},
     {"name": "search_docs", "arguments": {"query": "..."}},
+    {"name": "recall_memory", "arguments": {"query": "...", "types": ["profile|preference|project|summary"], "limit": 5}},
+    {"name": "search_history", "arguments": {"query": "...", "scope": "current|all", "limit": 5}},
     {"name": "web_search", "arguments": {"query": "..."}},
     {"name": "get_current_time", "arguments": {}}
   ],
@@ -186,6 +191,7 @@ $userMessage
             "search_docs",
             "web_search",
             "recall_memory",
+            "search_history",
             "update_persona",
             "save_memory",
             "set_user_addressing_preference"

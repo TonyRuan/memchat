@@ -266,50 +266,7 @@ Output JSON format:
         allActiveMemories: List<Memory>,
         persona: Persona?
     ): MemoryRecallResult {
-        val scene = detectScene(userMessage)
-        val recalled = when (scene) {
-            "memory_query" -> {
-                allActiveMemories.filter { it.type == MemoryType.PROJECT }.take(3) +
-                allActiveMemories.filter { it.type == MemoryType.PREFERENCE }.take(3) +
-                allActiveMemories.filter { it.type == MemoryType.PROFILE }.take(2) +
-                allActiveMemories.filter { it.type == MemoryType.SUMMARY }.take(2)
-            }
-            "project" -> {
-                allActiveMemories.filter { it.type == MemoryType.PROJECT }.take(3) +
-                allActiveMemories.filter { it.type == MemoryType.SUMMARY }.take(2) +
-                allActiveMemories.filter { it.type == MemoryType.PREFERENCE }.take(2)
-            }
-            "persona" -> {
-                allActiveMemories.filter { it.type == MemoryType.PREFERENCE }.take(3)
-            }
-            else -> {
-                allActiveMemories.filter { it.type == MemoryType.PROFILE }.take(3) +
-                allActiveMemories.filter { it.type == MemoryType.PREFERENCE }.take(2) +
-                allActiveMemories.filter { it.type == MemoryType.SUMMARY }.take(2)
-            }
-        }
-
-        val reasons = recalled.associate { it.id to "scene[$scene] recall" }
-        return MemoryRecallResult(
-            memories = recalled.distinctBy { it.id }.take(8),
-            scene = scene,
-            reasons = reasons
-        )
-    }
-
-    private fun detectScene(message: String): String {
-        val lower = message.lowercase()
-        return when {
-            lower.contains("记忆") || lower.contains("记住") || lower.contains("记得") ||
-            lower.contains("还记得") || lower.contains("remember") || lower.contains("memory") -> "memory_query"
-            lower.contains("project") || lower.contains("dev") || lower.contains("code") || lower.contains("app") ||
-            lower.contains("项目") || lower.contains("开发") || lower.contains("代码") || lower.contains("应用") -> "project"
-            lower.contains("persona") || lower.contains("role") || lower.contains("style") ||
-            lower.contains("角色") || lower.contains("风格") -> "persona"
-            lower.contains("prefer") || lower.contains("like") || lower.contains("habit") ||
-            lower.contains("偏好") || lower.contains("喜欢") || lower.contains("习惯") -> "preference"
-            else -> "general"
-        }
+        return MemoryRecallEngine().recall(userMessage, allActiveMemories, persona)
     }
 }
 

@@ -21,6 +21,11 @@ class MemoryChatSmokeTest {
     fun newChatOpensOnlyAfterConversationIsSaved() {
         compose.onNodeWithContentDescription("New Chat").performClick()
 
+        compose.waitUntil(timeoutMillis = 5_000) {
+            runCatching {
+                compose.onNodeWithText("新会话").assertIsDisplayed()
+            }.isSuccess
+        }
         compose.onNodeWithText("新会话").assertIsDisplayed()
     }
 }

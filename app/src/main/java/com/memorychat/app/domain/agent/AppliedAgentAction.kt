@@ -37,7 +37,7 @@ object AgentFinalAnswerPolicy {
         val appliedLines = appliedActions.map { it.observationLine() }
         val personaUpdates = appliedActions.filter { it.type == AppliedAgentActionType.PERSONA_UPDATED }
         val hasContextTool = decision.toolCalls.any { call ->
-            call.name in setOf("web_search", "search_docs", "get_current_time", "recall_memory")
+            call.name in setOf("web_search", "search_docs", "get_current_time", "recall_memory", "search_history")
         }
         val onlyPersonaUpdate = appliedActions.isNotEmpty() &&
             appliedActions.size == personaUpdates.size &&

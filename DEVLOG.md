@@ -1,5 +1,32 @@
 # MemoryChat Development Log
 
+## v1.0.70 (2026-06-18)
+
+### Changes
+- Merged the isolated `codex/memory-extraction-injection` worktree into the current mainline with Persona Contract / Room schema v2 intact
+- Added query-driven long-term memory recall so exact user queries rank ahead of generic scene/type fallback memories while preserving scene caps
+- Added the `recall_memory` Agent tool with query/type/limit arguments and tool-result context containing matched memory ids, content, and recall reasons
+- Added the `search_history` Agent tool so the model can retrieve bounded raw conversation snippets when prior discussion context is needed
+- Added `AgentHistorySearchStore`, `HistorySearchScope`, and `ConversationHistoryMatch` with current/all scope support, limit clamping, and `beforeCreatedAt` filtering to avoid recalling the current user message
+- Added lightweight repository-side history ranking over recent Room messages without changing the Room schema or adding FTS/migrations
+- Wired history search into both Chat UI and ADB Agent tool execution paths, while keeping `useMemory=false` from allowing cross-conversation history search
+- Kept the repaired ADB smoke database export path, including WAL/SHM sidecar export and stable binary output capture
+- Updated Agent runtime documentation and the emulator smoke script default APK path to v1.0.70
+- Stabilized `MemoryChatSmokeTest.newChatOpensOnlyAfterConversationIsSaved` with condition-based waiting for the async conversation create/navigation path
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.agent.AgentToolExecutorTest" --tests "com.memorychat.app.domain.agent.AgentDecisionEngineTest" --tests "com.memorychat.app.data.repository.RepositoriesTest"`
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+- PASS: manual clean install/launch/tap on `emulator-5554` verified the `新会话` chat title is visible after tapping `New Chat`
+- PASS: `.\gradlew.bat "-Pandroid.testInstrumentationRunnerArguments.class=com.memorychat.app.MemoryChatSmokeTest#newChatOpensOnlyAfterConversationIsSaved" connectedDebugAndroidTest` after reproducing the original full-suite timing failure
+- PASS: `.\gradlew.bat connectedDebugAndroidTest`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.70-debug.apk`
+
+---
+
 ## v1.0.69 (2026-06-18)
 
 ### Changes

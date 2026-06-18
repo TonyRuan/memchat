@@ -45,9 +45,95 @@ class ConversationRepository(
     suspend fun getMessages(convId: String) = messageDao.getByConversationId(convId).map { it.toDomain() }
     suspend fun getMessagesAfter(convId: String, createdAfter: Long) =
         messageDao.getByConversationIdAfter(convId, createdAfter).map { it.toDomain() }
+    suspend fun searchMessages(
+        query: String,
+        scope: HistorySearchScope,
+        currentConversationId: String,
+        beforeCreatedAt: Long,
+        limit: Int
+    ): List<ConversationHistoryMatch> {
+        val cleanQuery = query.trim()
+        if (cleanQuery.isBlank()) return emptyList()
+        val boundedLimit = limit.coerceIn(1, 5)
+        val candidateLimit = (boundedLimit * 80).coerceIn(80, 500)
+        val candidates = when (scope) {
+            HistorySearchScope.CURRENT -> messageDao.getByConversationIdBefore(
+                currentConversationId,
+                beforeCreatedAt,
+                candidateLimit
+            )
+            HistorySearchScope.ALL -> messageDao.getBefore(beforeCreatedAt, candidateLimit)
+        }
+        val titleByConversationId = conversationDao.getAll().associate { it.id to it.title }
+        return rankHistoryMatches(cleanQuery, candidates, titleByConversationId, boundedLimit)
+    }
+
     suspend fun saveMessage(msg: ChatMessage) = messageDao.insert(msg.toEntity())
     suspend fun deleteMessage(id: String) = messageDao.delete(id)
     suspend fun getMessageCount(convId: String) = messageDao.countByConversationId(convId)
+
+    private fun rankHistoryMatches(
+        query: String,
+        candidates: List<MessageEntity>,
+        titleByConversationId: Map<String, String>,
+        limit: Int
+    ): List<ConversationHistoryMatch> {
+        val tokens = tokenizeHistoryQuery(query)
+        if (tokens.isEmpty()) return emptyList()
+        val normalizedPhrase = normalizeHistoryText(query)
+        return candidates.mapNotNull { message ->
+            val title = titleByConversationId[message.conversationId].orEmpty()
+            val haystack = normalizeHistoryText("$title ${message.content}")
+            val matchedTokens = tokens.filter { haystack.contains(it) }.distinct()
+            if (matchedTokens.isEmpty()) return@mapNotNull null
+            val phraseScore = if (normalizedPhrase.length >= 3 && haystack.contains(normalizedPhrase)) 5 else 0
+            val tokenScore = matchedTokens.fold(0) { score, token ->
+                score + when {
+                    token.any { it in 'a'..'z' || it in '0'..'9' } && token.length >= 4 -> 5
+                    token.length >= 4 -> 4
+                    else -> 2
+                }
+            }
+            ConversationHistoryMatch(
+                conversationId = message.conversationId,
+                conversationTitle = title.ifBlank { "未命名会话" },
+                messageId = message.id,
+                role = message.role,
+                content = message.content,
+                createdAt = message.createdAt,
+                score = tokenScore + phraseScore,
+                reason = "query match: ${matchedTokens.take(6).joinToString(", ")}"
+            )
+        }
+            .sortedWith(
+                compareByDescending<ConversationHistoryMatch> { it.score }
+                    .thenByDescending { it.createdAt }
+            )
+            .take(limit)
+    }
+
+    private fun tokenizeHistoryQuery(query: String): List<String> {
+        val normalized = normalizeHistoryText(query)
+        val tokens = linkedSetOf<String>()
+        Regex("[a-z0-9_]{2,}").findAll(normalized).forEach { match ->
+            tokens += match.value
+        }
+        Regex("[\\u4E00-\\u9FFF]{2,}").findAll(normalized).forEach { match ->
+            val run = match.value
+            if (run.length <= 6) tokens += run
+            tokens.addAll(run.windowed(2))
+            if (run.length >= 4) tokens.addAll(run.windowed(4))
+        }
+        val stopTokens = setOf("之前", "上次", "那个", "这个", "怎么", "一下", "我们", "你们", "历史", "会话")
+        return tokens
+            .map { it.trim() }
+            .filter { it.length >= 2 && it !in stopTokens }
+            .distinct()
+    }
+
+    private fun normalizeHistoryText(text: String): String {
+        return text.lowercase().replace(Regex("\\s+"), " ").trim()
+    }
 }
 
 class MemoryRepository(private val memoryDao: MemoryDao, private val tombstoneDao: MemoryTombstoneDao) {

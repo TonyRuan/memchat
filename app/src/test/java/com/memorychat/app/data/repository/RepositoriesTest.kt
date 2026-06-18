@@ -1,16 +1,17 @@
 package com.memorychat.app.data.repository
 
 import com.google.gson.JsonParser
+import com.memorychat.app.data.local.db.dao.ConversationDao
 import com.memorychat.app.data.local.db.dao.MemoryDao
 import com.memorychat.app.data.local.db.dao.MemoryTombstoneDao
-import com.memorychat.app.data.local.db.dao.PersonaDao
-import com.memorychat.app.data.local.db.dao.ConversationDao
 import com.memorychat.app.data.local.db.dao.MessageDao
+import com.memorychat.app.data.local.db.dao.PersonaDao
 import com.memorychat.app.data.local.db.entity.ConversationEntity
-import com.memorychat.app.data.local.db.entity.MessageEntity
 import com.memorychat.app.data.local.db.entity.MemoryEntity
 import com.memorychat.app.data.local.db.entity.MemoryTombstoneEntity
+import com.memorychat.app.data.local.db.entity.MessageEntity
 import com.memorychat.app.data.local.db.entity.PersonaEntity
+import com.memorychat.app.domain.model.HistorySearchScope
 import com.memorychat.app.domain.model.MemoryStatus
 import com.memorychat.app.domain.model.MemoryType
 import com.memorychat.app.domain.model.Persona
@@ -72,6 +73,93 @@ class RepositoriesTest {
 
         assertEquals("用户手动标题", unchanged?.title)
         assertEquals("用户手动标题", conversationDao.getById("conv-1")?.title)
+    }
+
+    @Test
+    fun searchMessagesRanksAcrossConversationsAndExcludesCurrentTurn() = runBlocking {
+        val conversationDao = FakeConversationDao().apply {
+            insert(ConversationEntity(id = "conv-current", title = "当前会话"))
+            insert(ConversationEntity(id = "conv-history", title = "历史调试会话"))
+        }
+        val messageDao = FakeMessageDao().apply {
+            insert(MessageEntity(
+                id = "current-old",
+                conversationId = "conv-current",
+                role = "assistant",
+                content = "当前会话早些时候也提过 INFO22，但没有电机故障细节。",
+                createdAt = 1_000L
+            ))
+            insert(MessageEntity(
+                id = "history-strong",
+                conversationId = "conv-history",
+                role = "assistant",
+                content = "电机故障详情通过 INFO22 字段展示，调试时要优先核对原始帧。",
+                createdAt = 1_200L
+            ))
+            insert(MessageEntity(
+                id = "current-user",
+                conversationId = "conv-current",
+                role = "user",
+                content = "之前电机故障 INFO22 怎么看？",
+                createdAt = 2_000L
+            ))
+            insert(MessageEntity(
+                id = "future-history",
+                conversationId = "conv-history",
+                role = "assistant",
+                content = "电机故障 INFO22 之后的新结论不应该被当前回合搜到。",
+                createdAt = 2_500L
+            ))
+        }
+        val repo = ConversationRepository(conversationDao, messageDao)
+
+        val matches = repo.searchMessages(
+            query = "电机故障 INFO22",
+            scope = HistorySearchScope.ALL,
+            currentConversationId = "conv-current",
+            beforeCreatedAt = 2_000L,
+            limit = 1
+        )
+
+        assertEquals(listOf("history-strong"), matches.map { it.messageId })
+        assertEquals("conv-history", matches.single().conversationId)
+        assertEquals("历史调试会话", matches.single().conversationTitle)
+        assertTrue(matches.single().reason.contains("query match"))
+    }
+
+    @Test
+    fun searchMessagesCanLimitToCurrentConversation() = runBlocking {
+        val conversationDao = FakeConversationDao().apply {
+            insert(ConversationEntity(id = "conv-current", title = "当前会话"))
+            insert(ConversationEntity(id = "conv-history", title = "历史调试会话"))
+        }
+        val messageDao = FakeMessageDao().apply {
+            insert(MessageEntity(
+                id = "current-old",
+                conversationId = "conv-current",
+                role = "assistant",
+                content = "当前会话早些时候提过 INFO22 展示。",
+                createdAt = 1_000L
+            ))
+            insert(MessageEntity(
+                id = "history-strong",
+                conversationId = "conv-history",
+                role = "assistant",
+                content = "历史会话里也提过 INFO22 展示。",
+                createdAt = 1_200L
+            ))
+        }
+        val repo = ConversationRepository(conversationDao, messageDao)
+
+        val matches = repo.searchMessages(
+            query = "INFO22",
+            scope = HistorySearchScope.CURRENT,
+            currentConversationId = "conv-current",
+            beforeCreatedAt = 2_000L,
+            limit = 5
+        )
+
+        assertEquals(listOf("current-old"), matches.map { it.messageId })
     }
 
     @Test
@@ -478,17 +566,53 @@ class RepositoriesTest {
     }
 
     private class FakeMessageDao : MessageDao {
-        override suspend fun getByConversationId(convId: String): List<MessageEntity> = emptyList()
+        private val messages = LinkedHashMap<String, MessageEntity>()
 
-        override suspend fun getByConversationIdAfter(convId: String, createdAfter: Long): List<MessageEntity> = emptyList()
+        override suspend fun getByConversationId(convId: String): List<MessageEntity> {
+            return messages.values
+                .filter { it.conversationId == convId }
+                .sortedBy { it.createdAt }
+        }
 
-        override suspend fun insert(entity: MessageEntity) = Unit
+        override suspend fun getByConversationIdAfter(convId: String, createdAfter: Long): List<MessageEntity> {
+            return messages.values
+                .filter { it.conversationId == convId && it.createdAt > createdAfter }
+                .sortedBy { it.createdAt }
+        }
 
-        override suspend fun delete(id: String) = Unit
+        override suspend fun getByConversationIdBefore(
+            convId: String,
+            beforeCreatedAt: Long,
+            limit: Int
+        ): List<MessageEntity> {
+            return messages.values
+                .filter { it.conversationId == convId && it.createdAt < beforeCreatedAt }
+                .sortedByDescending { it.createdAt }
+                .take(limit)
+        }
 
-        override suspend fun countByConversationId(convId: String): Int = 0
+        override suspend fun getBefore(beforeCreatedAt: Long, limit: Int): List<MessageEntity> {
+            return messages.values
+                .filter { it.createdAt < beforeCreatedAt }
+                .sortedByDescending { it.createdAt }
+                .take(limit)
+        }
 
-        override suspend fun deleteByConversationId(convId: String) = Unit
+        override suspend fun insert(entity: MessageEntity) {
+            messages[entity.id] = entity
+        }
+
+        override suspend fun delete(id: String) {
+            messages.remove(id)
+        }
+
+        override suspend fun countByConversationId(convId: String): Int {
+            return messages.values.count { it.conversationId == convId }
+        }
+
+        override suspend fun deleteByConversationId(convId: String) {
+            messages.entries.removeIf { it.value.conversationId == convId }
+        }
     }
 
     private class FakePersonaDao : PersonaDao {

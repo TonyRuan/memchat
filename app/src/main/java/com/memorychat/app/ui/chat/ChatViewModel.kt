@@ -7,6 +7,7 @@ import com.memorychat.app.MemoryChatApp
 import com.memorychat.app.domain.agent.AgentDecision
 import com.memorychat.app.domain.agent.AgentDecisionEngine
 import com.memorychat.app.domain.agent.AgentFinalAnswerPolicy
+import com.memorychat.app.domain.agent.AgentHistorySearchStore
 import com.memorychat.app.domain.agent.AgentPersonaStore
 import com.memorychat.app.domain.agent.AgentToolExecutor
 import com.memorychat.app.domain.model.*
@@ -566,7 +567,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 app.personaRepo.savePersona(persona)
             }
         },
-        memoryStore = memoryExtractionStore()
+        memoryStore = memoryExtractionStore(),
+        historySearchStore = historySearchStore()
     ).execute(
         decision = decision,
         persona = persona,
@@ -769,6 +771,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             override suspend fun update(memory: Memory) {
                 app.memoryRepo.update(memory)
+            }
+        }
+    }
+
+    private fun historySearchStore(): AgentHistorySearchStore {
+        return object : AgentHistorySearchStore {
+            override suspend fun searchHistory(
+                query: String,
+                scope: HistorySearchScope,
+                currentConversationId: String,
+                beforeCreatedAt: Long,
+                limit: Int
+            ): List<ConversationHistoryMatch> {
+                return app.conversationRepo.searchMessages(
+                    query = query,
+                    scope = scope,
+                    currentConversationId = currentConversationId,
+                    beforeCreatedAt = beforeCreatedAt,
+                    limit = limit
+                )
             }
         }
     }

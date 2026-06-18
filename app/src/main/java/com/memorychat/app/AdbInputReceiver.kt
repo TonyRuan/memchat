@@ -8,16 +8,20 @@ import android.util.Log
 import com.memorychat.app.data.local.db.AppDatabase
 import com.memorychat.app.data.local.datastore.SettingsDataStore
 import com.memorychat.app.data.local.db.entity.MessageEntity
+import com.memorychat.app.data.repository.ConversationRepository
 import com.memorychat.app.data.repository.MemoryRepository
 import com.memorychat.app.data.repository.PersonaRepository
 import com.memorychat.app.domain.agent.AgentDecision
 import com.memorychat.app.domain.agent.AgentDecisionEngine
 import com.memorychat.app.domain.agent.AgentFinalAnswerPolicy
+import com.memorychat.app.domain.agent.AgentHistorySearchStore
 import com.memorychat.app.domain.agent.AgentPersonaStore
 import com.memorychat.app.domain.agent.AgentToolExecutor
 import com.memorychat.app.domain.model.ChatMessage
 import com.memorychat.app.domain.model.ChatRequest
 import com.memorychat.app.domain.model.Conversation
+import com.memorychat.app.domain.model.ConversationHistoryMatch
+import com.memorychat.app.domain.model.HistorySearchScope
 import com.memorychat.app.domain.model.Memory
 import com.memorychat.app.domain.model.MemoryRecallResult
 import com.memorychat.app.domain.model.MemoryType
@@ -67,6 +71,7 @@ class AdbInputReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         val db = AppDatabase.getInstance(context)
         val ds = SettingsDataStore(context)
+        val conversationRepo = ConversationRepository(db.conversationDao(), db.messageDao())
         val personaRepo = PersonaRepository(db.personaDao())
         val memoryRepo = MemoryRepository(db.memoryDao(), db.memoryTombstoneDao())
 
@@ -138,7 +143,8 @@ class AdbInputReceiver : BroadcastReceiver() {
                                     personaRepo.savePersona(persona)
                                 }
                             },
-                            memoryStore = extractionStore
+                            memoryStore = extractionStore,
+                            historySearchStore = historySearchStore(conversationRepo)
                         ).execute(
                             decision = decision,
                             persona = persona,
@@ -582,6 +588,26 @@ class AdbInputReceiver : BroadcastReceiver() {
                 appendLine("[Applied Actions]")
                 appendLine("These actions have already been applied to local app state. Treat them as observations, not suggestions.")
                 appliedActionLines.forEach { appendLine("- $it") }
+            }
+        }
+    }
+
+    private fun historySearchStore(conversationRepo: ConversationRepository): AgentHistorySearchStore {
+        return object : AgentHistorySearchStore {
+            override suspend fun searchHistory(
+                query: String,
+                scope: HistorySearchScope,
+                currentConversationId: String,
+                beforeCreatedAt: Long,
+                limit: Int
+            ): List<ConversationHistoryMatch> {
+                return conversationRepo.searchMessages(
+                    query = query,
+                    scope = scope,
+                    currentConversationId = currentConversationId,
+                    beforeCreatedAt = beforeCreatedAt,
+                    limit = limit
+                )
             }
         }
     }
