@@ -3,6 +3,8 @@ package com.memorychat.app.domain.agent
 import com.memorychat.app.domain.engine.MemoryExtractionStore
 import com.memorychat.app.domain.model.ChatMessage
 import com.memorychat.app.domain.model.Conversation
+import com.memorychat.app.domain.model.ConversationHistoryMatch
+import com.memorychat.app.domain.model.HistorySearchScope
 import com.memorychat.app.domain.model.Memory
 import com.memorychat.app.domain.model.MemoryStatus
 import com.memorychat.app.domain.model.MemoryType
@@ -190,6 +192,94 @@ class AgentToolExecutorTest {
         assertTrue(result.toolResults.single().contains("query match"))
     }
 
+    @Test
+    fun searchHistoryToolReturnsBoundedHistoricalMatchesWithoutWritingMemory() = runTest {
+        val historyStore = FakeHistorySearchStore(
+            results = listOf(
+                ConversationHistoryMatch(
+                    conversationId = "conv-history",
+                    conversationTitle = "历史调试会话",
+                    messageId = "hist-msg-1",
+                    role = "assistant",
+                    content = "电机故障详情通过 INFO22 字段展示，调试时先核对原始帧。",
+                    createdAt = 1_000L,
+                    score = 9,
+                    reason = "query match: info22"
+                )
+            )
+        )
+        val executor = AgentToolExecutor(
+            personaStore = FakePersonaStore(),
+            memoryStore = FakeMemoryStore(),
+            historySearchStore = historyStore
+        ) { 1_717_171_717_000L }
+
+        val result = executor.execute(
+            decision = AgentDecision(
+                toolCalls = listOf(
+                    AgentToolCall(
+                        name = "search_history",
+                        arguments = mapOf("query" to "电机故障 INFO22", "scope" to "all", "limit" to 99)
+                    )
+                )
+            ),
+            persona = Persona(name = "牛牛"),
+            conversation = Conversation(id = "conv-current", title = "当前会话"),
+            sourceMessages = listOf(
+                ChatMessage(
+                    id = "current-user",
+                    conversationId = "conv-current",
+                    role = "user",
+                    content = "之前电机故障 INFO22 怎么看？",
+                    createdAt = 2_000L
+                )
+            )
+        )
+
+        assertEquals(false, result.memoryWritten)
+        assertTrue(historyStore.requests.single().contains("query=电机故障 INFO22"))
+        assertTrue(historyStore.requests.single().contains("scope=ALL"))
+        assertTrue(historyStore.requests.single().contains("current=conv-current"))
+        assertTrue(historyStore.requests.single().contains("before=2000"))
+        assertTrue(historyStore.requests.single().contains("limit=5"))
+        val toolResult = result.toolResults.single()
+        assertTrue(toolResult.contains("[tool:search_history]"))
+        assertTrue(toolResult.contains("matched=1"))
+        assertTrue(toolResult.contains("conv-history"))
+        assertTrue(toolResult.contains("历史调试会话"))
+        assertTrue(toolResult.contains("hist-msg-1"))
+        assertTrue(toolResult.contains("INFO22"))
+        assertTrue(toolResult.contains("query match"))
+    }
+
+    @Test
+    fun searchHistorySkipsCrossConversationWhenMemoryUsageDisabled() = runTest {
+        val historyStore = FakeHistorySearchStore()
+        val executor = AgentToolExecutor(
+            personaStore = FakePersonaStore(),
+            memoryStore = FakeMemoryStore(),
+            historySearchStore = historyStore
+        ) { 1_717_171_717_000L }
+
+        val result = executor.execute(
+            decision = AgentDecision(
+                toolCalls = listOf(
+                    AgentToolCall(
+                        name = "search_history",
+                        arguments = mapOf("query" to "历史调试", "scope" to "all")
+                    )
+                )
+            ),
+            persona = Persona(name = "牛牛"),
+            conversation = Conversation(id = "conv-current", title = "当前会话", useMemory = false),
+            sourceMessages = listOf(ChatMessage(role = "user", content = "查一下之前历史调试"))
+        )
+
+        assertEquals(false, result.memoryWritten)
+        assertTrue(historyStore.requests.isEmpty())
+        assertTrue(result.toolResults.single().contains("skipped: use_memory=false"))
+    }
+
     private class FakePersonaStore : AgentPersonaStore {
         val saved = mutableListOf<Persona>()
         override suspend fun savePersona(persona: Persona) {
@@ -217,6 +307,23 @@ class AgentToolExecutorTest {
             updated += memory
             active.removeAll { it.id == memory.id }
             active += memory
+        }
+    }
+
+    private class FakeHistorySearchStore(
+        private val results: List<ConversationHistoryMatch> = emptyList()
+    ) : AgentHistorySearchStore {
+        val requests = mutableListOf<String>()
+
+        override suspend fun searchHistory(
+            query: String,
+            scope: HistorySearchScope,
+            currentConversationId: String,
+            beforeCreatedAt: Long,
+            limit: Int
+        ): List<ConversationHistoryMatch> {
+            requests += "query=$query scope=${scope.name} current=$currentConversationId before=$beforeCreatedAt limit=$limit"
+            return results.take(limit)
         }
     }
 }

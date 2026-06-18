@@ -1,5 +1,26 @@
 # MemoryChat Development Log
 
+## v1.0.69 (2026-06-18)
+
+### Changes
+- Added the `search_history` Agent tool so the model can retrieve bounded raw conversation snippets when prior discussion context is needed
+- Added `AgentHistorySearchStore`, `HistorySearchScope`, and `ConversationHistoryMatch` with current/all scope support, limit clamping, and `beforeCreatedAt` filtering to avoid recalling the current user message
+- Added lightweight repository-side history ranking over recent Room messages without changing the Room schema or adding FTS/migrations
+- Wired history search into both Chat UI and ADB Agent tool execution paths, while keeping `useMemory=false` from allowing cross-conversation history search
+- Updated Agent runtime documentation and the emulator smoke script default APK path to v1.0.69
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.agent.AgentToolExecutorTest" --tests "com.memorychat.app.domain.agent.AgentDecisionEngineTest" --tests "com.memorychat.app.domain.agent.AgentFinalAnswerPolicyTest" --tests "com.memorychat.app.data.repository.RepositoriesTest"` (RED failed before implementation, then passed)
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+- PASS: created/opened a conversation on `emulator-5554`, then `.\tools\e2e\run_memorychat_emulator_smoke.ps1 -AdbPath 'C:\Android\android-sdk\platform-tools\adb.exe' -DeviceId emulator-5554 -WaitSeconds 60` installed v1.0.69, sent the ADB broadcast, and verified `[4/4] API response` plus `=== DONE`
+- PASS: `.\gradlew.bat connectedDebugAndroidTest`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.69-debug.apk`
+
+---
+
 ## v1.0.68 (2026-06-17)
 
 ### Changes

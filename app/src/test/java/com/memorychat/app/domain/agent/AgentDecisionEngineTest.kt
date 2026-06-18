@@ -94,6 +94,7 @@ class AgentDecisionEngineTest {
         assertTrue(prompt.contains("update_persona"))
         assertTrue(prompt.contains("set_user_addressing_preference"))
         assertTrue(prompt.contains("web_search"))
+        assertTrue(prompt.contains("search_history"))
         assertTrue(prompt.contains("Decide by semantic meaning"))
         assertTrue(prompt.contains("Current assistant persona"))
     }
@@ -120,5 +121,30 @@ class AgentDecisionEngineTest {
 
         assertEquals("web_search", decision.toolCalls.single().name)
         assertEquals("latest Android news", decision.toolCalls.single().stringArg("query"))
+    }
+
+    @Test
+    fun keepsSearchHistoryToolCall() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "tool_calls": [
+                    {"name": "search_history", "arguments": {"query": "电机故障 INFO22", "scope": "all", "limit": 5}}
+                  ],
+                  "should_continue_chat": true
+                }
+                """.trimIndent()
+            )
+        )
+
+        val decision = AgentDecisionEngine(provider, "fake-model").decide(
+            userMessage = "之前电机故障 INFO22 是怎么处理的？",
+            currentPersona = Persona(name = "牛牛")
+        )
+
+        assertEquals("search_history", decision.toolCalls.single().name)
+        assertEquals("电机故障 INFO22", decision.toolCalls.single().stringArg("query"))
+        assertEquals("all", decision.toolCalls.single().stringArg("scope"))
     }
 }

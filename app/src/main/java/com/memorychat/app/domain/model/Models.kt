@@ -61,6 +61,19 @@ data class ChatMessage(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+enum class HistorySearchScope { CURRENT, ALL }
+
+data class ConversationHistoryMatch(
+    val conversationId: String,
+    val conversationTitle: String,
+    val messageId: String,
+    val role: String,
+    val content: String,
+    val createdAt: Long,
+    val score: Int = 0,
+    val reason: String = ""
+)
+
 data class ChatRequest(
     val messages: List<ChatMessage>,
     val model: String,

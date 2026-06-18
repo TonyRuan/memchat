@@ -48,4 +48,29 @@ class AgentFinalAnswerPolicyTest {
         assertEquals(true, result.shouldCallModel)
         assertEquals("PERSONA_UPDATED persona.name: 牛牛 -> 豆包", result.appliedActionLines.single())
     }
+
+    @Test
+    fun personaUpdateWithHistorySearchContinuesModelWithAppliedActionContext() {
+        val result = AgentFinalAnswerPolicy.resolve(
+            decision = AgentDecision(
+                toolCalls = listOf(
+                    AgentToolCall("update_persona"),
+                    AgentToolCall("search_history", mapOf("query" to "之前的项目边界"))
+                )
+            ),
+            appliedActions = listOf(
+                AppliedAgentAction(
+                    type = AppliedAgentActionType.PERSONA_UPDATED,
+                    target = "persona.name",
+                    before = "牛牛",
+                    after = "豆包",
+                    userVisibleText = "好的，已经改名为「豆包」。"
+                )
+            )
+        )
+
+        assertNull(result.directAnswer)
+        assertEquals(true, result.shouldCallModel)
+        assertEquals("PERSONA_UPDATED persona.name: 牛牛 -> 豆包", result.appliedActionLines.single())
+    }
 }

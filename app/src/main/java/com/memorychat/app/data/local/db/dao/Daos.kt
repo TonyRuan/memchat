@@ -29,6 +29,12 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE conversationId = :convId AND createdAt > :createdAfter ORDER BY createdAt ASC")
     suspend fun getByConversationIdAfter(convId: String, createdAfter: Long): List<MessageEntity>
 
+    @Query("SELECT * FROM messages WHERE conversationId = :convId AND createdAt < :beforeCreatedAt ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun getByConversationIdBefore(convId: String, beforeCreatedAt: Long, limit: Int): List<MessageEntity>
+
+    @Query("SELECT * FROM messages WHERE createdAt < :beforeCreatedAt ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun getBefore(beforeCreatedAt: Long, limit: Int): List<MessageEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: MessageEntity)
 
