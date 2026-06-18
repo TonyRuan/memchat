@@ -1,1 +1,0 @@
-{"timestamp":"2026-06-01T08:55:00+08:00","source":"user_feedback_and_design_approval","event":"用户指出 Agent 人格/设置如名字、性格等不应被记忆整理笼统归成 Preference，并批准按 persona/preference 分流方案修改。","conclusion":"人格设定必须走 personas 表或 persona 更新路径，不能污染 memories；真正的用户回答偏好才保存为 PREFERENCE。","confidence":90}

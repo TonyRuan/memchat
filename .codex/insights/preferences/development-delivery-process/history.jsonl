@@ -1,2 +1,0 @@
-{"timestamp":"2026-06-01T00:00:00+08:00","source":"user_explicit_feedback","event":"用户提出项目开发约定：每次更新同步版本号；每次有效更改用 Git 保存；写开发日志；关键变更交付时最好构建 APK 方便测试。","conclusion":"将这些规则作为 MemoryChat 项目交付偏好记录，并同步写入 AGENTS.md。","confidence":90}
-{"timestamp":"2026-06-01T00:00:00+08:00","source":"user_explicit_feedback","event":"用户指出纯审计文档没有改代码，不应该因此更新应用版本号。","conclusion":"收紧交付规则：只有影响应用行为、配置默认值、调试流程或可测试产物的有效变更才更新 APK 版本；纯审计、规划或只读分析不单独 bump app version。","confidence":95}

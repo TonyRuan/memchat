@@ -1,3 +1,0 @@
-{"timestamp":"2026-06-01T00:00:00+08:00","source":"user_explicit_feedback","event":"用户提出：做测试时尽量使用子代理以提升速度并避免上下文污染；之前的测试可能不全面、不严谨，需要结合项目实际和 PRD 重构。","conclusion":"将测试工作偏好记录为 PRD 对齐的子代理测试流程。","confidence":90}
-{"timestamp":"2026-06-01T00:00:00+08:00","source":"user_explicit_feedback","event":"用户进一步指出之前 Agent 工作质量较差，要求整体扫描测试项目当前实现与 PRD 目标的偏差和 bug。","conclusion":"后续审计不能依赖旧 Agent 的完成结论，应重新按 PRD、代码和真实验证证据建立差距清单。","confidence":95}
-{"confidence":95,"source":"user_explicit_feedback","event":"用户指出：做模拟器测试时尽量让子代理执行，因为 ADB、logcat、数据库导出等过程太污染主会话上下文。","conclusion":"细化子代理测试偏好：模拟器/真机 E2E 和真实模型链路默认优先交给子代理，主线程只整合结论、关键证据和阻塞点。","timestamp":"2026-06-01T03:20:00+08:00"}

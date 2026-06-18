@@ -11,3 +11,7 @@
 *.apk
 *.ap_
 *.aab
+
+# Codex local workspace artifacts
+/.codex/
+/.codex-remote-attachments/
