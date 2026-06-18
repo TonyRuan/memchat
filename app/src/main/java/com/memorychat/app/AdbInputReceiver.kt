@@ -29,8 +29,11 @@ import com.memorychat.app.domain.provider.OpenAICompatibleProvider
 import com.memorychat.app.domain.engine.ChatContextWindowConfig
 import com.memorychat.app.domain.engine.ChatContextWindowManager
 import com.memorychat.app.domain.engine.ChatContextWindowResult
+import com.memorychat.app.domain.engine.ChatPromptBuilder
+import com.memorychat.app.domain.engine.ChatRequestPreparer
 import com.memorychat.app.domain.engine.ContextLengthErrorDetector
 import com.memorychat.app.domain.engine.ConversationTitleGenerator
+import com.memorychat.app.domain.engine.ConversationRollingSummaryStore
 import com.memorychat.app.domain.engine.LlmConversationContextSummarizer
 import com.memorychat.app.domain.engine.MemoryExtractionSaver
 import com.memorychat.app.domain.engine.MemoryExtractionStore
@@ -43,7 +46,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.time.Instant
 
 class AdbInputReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -209,23 +211,17 @@ class AdbInputReceiver : BroadcastReceiver() {
                             Log.i("AdbInput", "  -> [${mem.type}] ${mem.content.take(50)}")
                         }
 
-                        val systemPrompt = MemoryEngine.buildRecallPrompt(
-                            persona = persona,
-                            preferences = recall.memories.filter { it.type == MemoryType.PREFERENCE },
-                            profile = recall.memories.filter { it.type == MemoryType.PROFILE },
-                            projects = recall.memories.filter { it.type == MemoryType.PROJECT },
-                            summaries = recall.memories.filter { it.type == MemoryType.SUMMARY }
+                        val systemPrompt = ChatPromptBuilder.buildBasePrompt(
+                            memories = recall.memories,
+                            persona = persona
                         )
                         messages.add(ChatMessage(role = "system", content = systemPrompt))
                         Log.i("AdbInput", "  System prompt injected (${systemPrompt.length} chars)")
                     } else {
                         Log.i("AdbInput", "  No memories in DB, skipping recall")
-                        val systemPrompt = MemoryEngine.buildRecallPrompt(
+                        val systemPrompt = ChatPromptBuilder.buildBasePrompt(
                             persona = persona,
-                            preferences = emptyList(),
-                            profile = emptyList(),
-                            projects = emptyList(),
-                            summaries = emptyList()
+                            memories = emptyList()
                         )
                         messages.add(ChatMessage(role = "system", content = systemPrompt))
                         Log.i("AdbInput", "  System prompt injected (${systemPrompt.length} chars)")
@@ -354,13 +350,6 @@ class AdbInputReceiver : BroadcastReceiver() {
             Log.i("AdbInput", "  -> [${mem.type}] ${mem.content.take(50)}")
         }
 
-        val basePrompt = MemoryEngine.buildRecallPrompt(
-            persona = persona,
-            preferences = recall.memories.filter { it.type == MemoryType.PREFERENCE },
-            profile = recall.memories.filter { it.type == MemoryType.PROFILE },
-            projects = recall.memories.filter { it.type == MemoryType.PROJECT },
-            summaries = recall.memories.filter { it.type == MemoryType.SUMMARY }
-        )
         val conversationMessages = db.messageDao()
             .getByConversationId(conversationId)
             .map { entity ->
@@ -372,36 +361,31 @@ class AdbInputReceiver : BroadcastReceiver() {
                     createdAt = entity.createdAt
                 )
             }
-        val contextWindow = ChatContextWindowManager(
-            LlmConversationContextSummarizer(provider, model)
-        ).build(
-            messages = conversationMessages,
-            existingSummary = ds.getConversationRollingSummary(conversationId),
-            summaryWatermark = ds.getConversationRollingSummaryWatermark(conversationId),
-            config = ChatContextWindowConfig(
+        val prepared = ChatRequestPreparer(
+            contextWindowManager = ChatContextWindowManager(
+                LlmConversationContextSummarizer(provider, model)
+            ),
+            rollingSummaryStore = rollingSummaryStore(ds)
+        ).prepare(
+            conversationId = conversationId,
+            sourceMessages = conversationMessages,
+            memories = recall.memories,
+            persona = persona,
+            toolResults = toolResults,
+            appliedActionLines = appliedActionLines,
+            temporaryResponseFormat = decision.temporaryResponseFormat,
+            contextConfig = ChatContextWindowConfig(
                 contextWindowTokens = ds.contextWindowTokens.first(),
                 maxCompletionTokens = ds.maxTokens.first(),
                 safetyMarginTokens = ds.safetyMarginTokens.first(),
                 compressionMessageTurnThreshold = ds.compressionMessageTurnThreshold.first()
             )
         )
-        if (contextWindow.summaryUpdated) {
-            ds.saveConversationRollingSummary(conversationId, contextWindow.summary)
-            ds.saveConversationRollingSummaryWatermark(conversationId, contextWindow.summaryWatermark)
-        }
-        saveDebugSnapshot(ds, conversationId, recall, contextWindow)
+        saveDebugSnapshot(ds, conversationId, recall, prepared.contextWindow)
 
-        val systemPrompt = decorateSystemPrompt(
-            basePrompt = basePrompt,
-            decision = decision,
-            toolResults = toolResults,
-            appliedActionLines = appliedActionLines,
-            rollingSummary = contextWindow.summary
-        )
-        val messages = mutableListOf(ChatMessage(role = "system", content = systemPrompt))
-        messages += contextWindow.messages.map { ChatMessage(role = it.role, content = it.content) }
-        Log.i("AdbInput", "  System prompt injected (${systemPrompt.length} chars)")
-        Log.i("AdbInput", "[3/4] Calling API with ${messages.size} messages (recall=${recall.memories.size}, context=${contextWindow.messages.size})")
+        val messages = prepared.messages
+        Log.i("AdbInput", "  System prompt injected (${messages.firstOrNull()?.content?.length ?: 0} chars)")
+        Log.i("AdbInput", "[3/4] Calling API with ${messages.size} messages (recall=${recall.memories.size}, context=${prepared.contextWindow.messages.size})")
 
         val response = try {
             provider.complete(
@@ -415,13 +399,20 @@ class AdbInputReceiver : BroadcastReceiver() {
         } catch (e: Exception) {
             if (!ContextLengthErrorDetector.isContextLengthExceeded(e.message)) throw e
             Log.w("AdbInput", "Context exceeded; compressing and retrying once")
-            val retryContextWindow = ChatContextWindowManager(
-                LlmConversationContextSummarizer(provider, model)
-            ).build(
-                messages = conversationMessages,
-                existingSummary = ds.getConversationRollingSummary(conversationId),
-                summaryWatermark = ds.getConversationRollingSummaryWatermark(conversationId),
-                config = ChatContextWindowConfig(
+            val retryPrepared = ChatRequestPreparer(
+                contextWindowManager = ChatContextWindowManager(
+                    LlmConversationContextSummarizer(provider, model)
+                ),
+                rollingSummaryStore = rollingSummaryStore(ds)
+            ).prepare(
+                conversationId = conversationId,
+                sourceMessages = conversationMessages,
+                memories = recall.memories,
+                persona = persona,
+                toolResults = toolResults,
+                appliedActionLines = appliedActionLines,
+                temporaryResponseFormat = decision.temporaryResponseFormat,
+                contextConfig = ChatContextWindowConfig(
                     contextWindowTokens = ds.contextWindowTokens.first(),
                     maxCompletionTokens = ds.maxTokens.first(),
                     safetyMarginTokens = ds.safetyMarginTokens.first(),
@@ -430,23 +421,10 @@ class AdbInputReceiver : BroadcastReceiver() {
                     forceCompression = true
                 )
             )
-            if (retryContextWindow.summaryUpdated) {
-                ds.saveConversationRollingSummary(conversationId, retryContextWindow.summary)
-                ds.saveConversationRollingSummaryWatermark(conversationId, retryContextWindow.summaryWatermark)
-            }
-            saveDebugSnapshot(ds, conversationId, recall, retryContextWindow, retryAfterContextLimit = true)
-            val retrySystemPrompt = decorateSystemPrompt(
-                basePrompt = basePrompt,
-                decision = decision,
-                toolResults = toolResults,
-                appliedActionLines = appliedActionLines,
-                rollingSummary = retryContextWindow.summary
-            )
-            val retryMessages = mutableListOf(ChatMessage(role = "system", content = retrySystemPrompt))
-            retryMessages += retryContextWindow.messages.map { ChatMessage(role = it.role, content = it.content) }
+            saveDebugSnapshot(ds, conversationId, recall, retryPrepared.contextWindow, retryAfterContextLimit = true)
             provider.complete(
                 ChatRequest(
-                    messages = retryMessages,
+                    messages = retryPrepared.messages,
                     model = model,
                     stream = false,
                     enableWebSearch = decision.usesWebSearch()
@@ -558,40 +536,6 @@ class AdbInputReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun decorateSystemPrompt(
-        basePrompt: String,
-        decision: AgentDecision,
-        toolResults: List<String>,
-        appliedActionLines: List<String>,
-        rollingSummary: String = ""
-    ): String {
-        return buildString {
-            append(basePrompt)
-            appendLine()
-            if (rollingSummary.isNotBlank()) {
-                appendLine("[Rolling Conversation Summary]")
-                appendLine(rollingSummary)
-                appendLine()
-            }
-            appendLine("[Environment]")
-            appendLine("Current time: ${Instant.now()}")
-            decision.temporaryResponseFormat?.let {
-                appendLine("Temporary response format for this answer: $it")
-            }
-            if (toolResults.isNotEmpty()) {
-                appendLine()
-                appendLine("[Tool Results]")
-                toolResults.forEach { appendLine("- $it") }
-            }
-            if (appliedActionLines.isNotEmpty()) {
-                appendLine()
-                appendLine("[Applied Actions]")
-                appendLine("These actions have already been applied to local app state. Treat them as observations, not suggestions.")
-                appliedActionLines.forEach { appendLine("- $it") }
-            }
-        }
-    }
-
     private fun historySearchStore(conversationRepo: ConversationRepository): AgentHistorySearchStore {
         return object : AgentHistorySearchStore {
             override suspend fun searchHistory(
@@ -608,6 +552,26 @@ class AdbInputReceiver : BroadcastReceiver() {
                     beforeCreatedAt = beforeCreatedAt,
                     limit = limit
                 )
+            }
+        }
+    }
+
+    private fun rollingSummaryStore(ds: SettingsDataStore): ConversationRollingSummaryStore {
+        return object : ConversationRollingSummaryStore {
+            override suspend fun getSummary(conversationId: String): String {
+                return ds.getConversationRollingSummary(conversationId)
+            }
+
+            override suspend fun getSummaryWatermark(conversationId: String): Long {
+                return ds.getConversationRollingSummaryWatermark(conversationId)
+            }
+
+            override suspend fun saveSummary(conversationId: String, summary: String) {
+                ds.saveConversationRollingSummary(conversationId, summary)
+            }
+
+            override suspend fun saveSummaryWatermark(conversationId: String, watermark: Long) {
+                ds.saveConversationRollingSummaryWatermark(conversationId, watermark)
             }
         }
     }

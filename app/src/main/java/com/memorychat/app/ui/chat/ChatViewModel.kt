@@ -16,9 +16,11 @@ import com.memorychat.app.domain.engine.ChatTurnErrorPersister
 import com.memorychat.app.domain.engine.ChatContextWindowConfig
 import com.memorychat.app.domain.engine.ChatContextWindowManager
 import com.memorychat.app.domain.engine.ChatContextWindowResult
+import com.memorychat.app.domain.engine.ChatRequestPreparer
 import com.memorychat.app.domain.engine.ContextLengthErrorDetector
 import com.memorychat.app.domain.engine.ConversationTitleGenerator
 import com.memorychat.app.domain.engine.ConversationMessageStore
+import com.memorychat.app.domain.engine.ConversationRollingSummaryStore
 import com.memorychat.app.domain.engine.LlmConversationContextSummarizer
 import com.memorychat.app.domain.engine.MemoryExtractionSaver
 import com.memorychat.app.domain.engine.MemoryExtractionStore
@@ -339,11 +341,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         """.trimIndent()
     }
 
-    private data class PreparedChatContext(
-        val messages: List<ChatMessage>,
-        val contextWindow: ChatContextWindowResult
-    )
-
     private suspend fun prepareChatRequestMessages(
         provider: OpenAICompatibleProvider,
         model: String,
@@ -354,43 +351,28 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         appliedActionLines: List<String>,
         temporaryResponseFormat: String?,
         forceCompression: Boolean = false
-    ): PreparedChatContext {
-        val contextWindow = ChatContextWindowManager(
+    ) = ChatRequestPreparer(
+        contextWindowManager = ChatContextWindowManager(
             LlmConversationContextSummarizer(provider, model)
-        ).build(
-            messages = _messages.value,
-            existingSummary = app.settingsDataStore.getConversationRollingSummary(conv.id),
-            summaryWatermark = app.settingsDataStore.getConversationRollingSummaryWatermark(conv.id),
-            config = ChatContextWindowConfig(
-                contextWindowTokens = app.settingsDataStore.contextWindowTokens.first(),
-                maxCompletionTokens = app.settingsDataStore.maxTokens.first(),
-                safetyMarginTokens = app.settingsDataStore.safetyMarginTokens.first(),
-                compressionMessageTurnThreshold = app.settingsDataStore.compressionMessageTurnThreshold.first(),
-                recentMessageCount = if (forceCompression) 4 else 12,
-                forceCompression = forceCompression
-            )
+        ),
+        rollingSummaryStore = rollingSummaryStore()
+    ).prepare(
+        conversationId = conv.id,
+        sourceMessages = _messages.value,
+        memories = memories,
+        persona = persona,
+        toolResults = toolResults,
+        appliedActionLines = appliedActionLines,
+        temporaryResponseFormat = temporaryResponseFormat,
+        contextConfig = ChatContextWindowConfig(
+            contextWindowTokens = app.settingsDataStore.contextWindowTokens.first(),
+            maxCompletionTokens = app.settingsDataStore.maxTokens.first(),
+            safetyMarginTokens = app.settingsDataStore.safetyMarginTokens.first(),
+            compressionMessageTurnThreshold = app.settingsDataStore.compressionMessageTurnThreshold.first(),
+            recentMessageCount = if (forceCompression) 4 else 12,
+            forceCompression = forceCompression
         )
-        if (contextWindow.summaryUpdated) {
-            app.settingsDataStore.saveConversationRollingSummary(conv.id, contextWindow.summary)
-            app.settingsDataStore.saveConversationRollingSummaryWatermark(conv.id, contextWindow.summaryWatermark)
-        }
-
-        val systemPrompt = buildSystemPrompt(
-            memories = memories,
-            persona = persona,
-            toolResults = toolResults,
-            appliedActionLines = appliedActionLines,
-            temporaryResponseFormat = temporaryResponseFormat,
-            rollingSummary = contextWindow.summary
-        )
-        val requestMessages = contextWindow.messages
-            .map { ChatMessage(role = it.role, content = it.content) }
-            .toMutableList()
-        if (systemPrompt.isNotBlank()) {
-            requestMessages.add(0, ChatMessage(role = "system", content = systemPrompt))
-        }
-        return PreparedChatContext(requestMessages, contextWindow)
-    }
+    )
 
     private suspend fun streamAssistantContent(
         provider: OpenAICompatibleProvider,
@@ -511,48 +493,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _messages.value = _messages.value + msg
             }
             finishGeneration()
-        }
-    }
-
-    private fun buildSystemPrompt(
-        memories: List<Memory>,
-        persona: Persona? = null,
-        toolResults: List<String> = emptyList(),
-        appliedActionLines: List<String> = emptyList(),
-        temporaryResponseFormat: String? = null,
-        rollingSummary: String = ""
-    ): String {
-        val base = MemoryEngine.buildRecallPrompt(
-            persona = persona,
-            preferences = memories.filter { it.type == MemoryType.PREFERENCE },
-            profile = memories.filter { it.type == MemoryType.PROFILE },
-            projects = memories.filter { it.type == MemoryType.PROJECT },
-            summaries = memories.filter { it.type == MemoryType.SUMMARY }
-        )
-        return buildString {
-            append(base)
-            appendLine()
-            if (rollingSummary.isNotBlank()) {
-                appendLine("[Rolling Conversation Summary]")
-                appendLine(rollingSummary)
-                appendLine()
-            }
-            appendLine("[Environment]")
-            appendLine("Current time: ${java.time.Instant.ofEpochMilli(System.currentTimeMillis())}")
-            if (temporaryResponseFormat != null) {
-                appendLine("Temporary response format for this answer: $temporaryResponseFormat")
-            }
-            if (toolResults.isNotEmpty()) {
-                appendLine()
-                appendLine("[Tool Results]")
-                toolResults.forEach { appendLine("- $it") }
-            }
-            if (appliedActionLines.isNotEmpty()) {
-                appendLine()
-                appendLine("[Applied Actions]")
-                appendLine("These actions have already been applied to local app state. Treat them as observations, not suggestions.")
-                appliedActionLines.forEach { appendLine("- $it") }
-            }
         }
     }
 
@@ -791,6 +731,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     beforeCreatedAt = beforeCreatedAt,
                     limit = limit
                 )
+            }
+        }
+    }
+
+    private fun rollingSummaryStore(): ConversationRollingSummaryStore {
+        return object : ConversationRollingSummaryStore {
+            override suspend fun getSummary(conversationId: String): String {
+                return app.settingsDataStore.getConversationRollingSummary(conversationId)
+            }
+
+            override suspend fun getSummaryWatermark(conversationId: String): Long {
+                return app.settingsDataStore.getConversationRollingSummaryWatermark(conversationId)
+            }
+
+            override suspend fun saveSummary(conversationId: String, summary: String) {
+                app.settingsDataStore.saveConversationRollingSummary(conversationId, summary)
+            }
+
+            override suspend fun saveSummaryWatermark(conversationId: String, watermark: Long) {
+                app.settingsDataStore.saveConversationRollingSummaryWatermark(conversationId, watermark)
             }
         }
     }

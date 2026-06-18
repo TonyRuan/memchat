@@ -1,5 +1,28 @@
 # MemoryChat Development Log
 
+## v1.0.73 (2026-06-18)
+
+### Changes
+- Extracted `ChatPromptBuilder` into the domain engine layer so memory/persona prompt assembly and runtime prompt decoration no longer live in `ChatViewModel`
+- Added `ChatRequestPreparer` and `ConversationRollingSummaryStore` to centralize context window compression, rolling summary persistence, and final request message assembly
+- Rewired `ChatViewModel` and the ADB Agent path to use the shared request preparation pipeline while keeping UI/Receiver layers as repository and settings adapters
+- Kept the legacy ADB direct broadcast path on base memory prompt injection only, preserving its existing behavior while removing duplicate memory type grouping logic
+- Added focused unit coverage for prompt building and request preparation contracts
+- Updated Agent tool runtime documentation and emulator smoke script default APK path to v1.0.73
+
+### Verification
+- PASS: `.\gradlew.bat :app:testDebugUnitTest --tests "com.memorychat.app.domain.engine.ChatPromptBuilderTest"` (RED compile failure before implementation, then passed)
+- PASS: `.\gradlew.bat :app:testDebugUnitTest --tests "com.memorychat.app.domain.engine.ChatRequestPreparerTest"` (RED compile failure before implementation, then passed)
+- PASS: `.\gradlew.bat :app:testDebugUnitTest --tests "com.memorychat.app.domain.engine.ChatPromptBuilderTest" --tests "com.memorychat.app.domain.engine.ChatRequestPreparerTest" --tests "com.memorychat.app.domain.engine.ChatContextWindowManagerTest"`
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+- PASS: `.\tools\e2e\run_memorychat_emulator_smoke.ps1 -DeviceId emulator-5554 -WaitSeconds 90` installed `MemoryChat-v1.0.73-debug.apk`, verified logcat `[4/4] API response` and `=== DONE`, exported DB copies, and confirmed conversation title auto-update
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.73-debug.apk`
+
+---
+
 ## v1.0.72 (2026-06-18)
 
 ### Changes

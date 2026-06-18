@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-截至 `v1.0.72`，MemoryChat 已有一套轻量的 Agent 工具运行时。它不是运行时动态安装的 skill 系统，而是编译进 APK 的静态工具集合：
+截至 `v1.0.73`，MemoryChat 已有一套轻量的 Agent 工具运行时。它不是运行时动态安装的 skill 系统，而是编译进 APK 的静态工具集合：
 
 - 能力清单写在 `AgentDecisionEngine` 的路由 prompt 里。
 - 允许调用的工具名写在 `AgentDecisionEngine.allowedTools` 白名单里。
