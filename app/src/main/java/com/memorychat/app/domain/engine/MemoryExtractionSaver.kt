@@ -72,8 +72,18 @@ class MemoryExtractionSaver(
             }
             !isPersonaSetting
         }
+        val filteredUpdates = result.updates.filter { update ->
+            val content = update.newContent.trim()
+            val isPersonaSetting = isAssistantPersonaSetting(content)
+            if (isPersonaSetting) {
+                discarded += DiscardedInfo(content, "assistant persona setting belongs to Persona, not Memory")
+                AppLogger.i("MemoryExtraction", "Skipping persona setting update: ${content.take(40)}")
+            }
+            !isPersonaSetting
+        }
         val filteredResult = result.copy(
             newMemories = filteredNewMemories,
+            updates = filteredUpdates,
             discarded = discarded
         )
         val fallbackSourceIds = messages.map { it.id }
@@ -125,7 +135,7 @@ class MemoryExtractionSaver(
             activeMemories += memory
         }
 
-        result.updates.forEach { update ->
+        filteredResult.updates.forEach { update ->
             val existingMemory = store.getById(update.targetMemoryId)
             if (existingMemory != null) {
                 if (existingMemory.userEdited) {
@@ -189,14 +199,55 @@ class MemoryExtractionSaver(
             .lowercase()
             .replace(Regex("[\\s\\p{Punct}，。！？；：“”‘’、（）【】《》]+"), "")
         if (compact.isBlank()) return false
-        val userIdentityMarkers = listOf("我叫", "我是", "我的名字", "叫我", "称呼我", "喊我")
-        if (userIdentityMarkers.any { compact.contains(it) }) return false
+
+        val modelOutputMarkers = listOf(
+            "用户希望ai名字",
+            "用户希望助手名字",
+            "用户希望模型名字",
+            "用户称呼助手为",
+            "用户把助手叫作",
+            "用户把助手叫做",
+            "用户将助手命名为",
+            "用户给助手取名",
+            "用户想把ai名字",
+            "用户想把助手名字",
+            "用户希望助手使命",
+            "用户希望助手目标",
+            "用户希望助手任务",
+            "用户希望助手专长",
+            "用户希望助手沟通风格",
+            "用户希望助手交流风格",
+            "用户希望助手说话风格",
+            "用户希望助手工具策略",
+            "用户希望助手记忆策略",
+            "用户希望助手示例对话",
+            "用户希望助手边界",
+            "用户希望助手限制",
+            "用户想让助手使命",
+            "用户想让助手专长",
+            "用户想让助手工具策略",
+            "用户想让助手记忆策略",
+            "用户想让助手示例对话",
+            "用户想让助手边界",
+            "userwantsassistantname",
+            "userwantstheassistantname",
+            "userwantsassistantmission",
+            "userwantsassistantexpertise",
+            "userwantsassistantcommunicationstyle",
+            "userwantsassistanttoolpolicy",
+            "userwantsassistantmemorypolicy",
+            "userwantsassistantexampledialogues",
+            "userrenamedassistant",
+            "usernamedassistant",
+            "usercallstheassistant"
+        )
+        if (modelOutputMarkers.any { compact.contains(it) }) return true
 
         val assistantIdentityMarkers = listOf(
             "你的名字",
             "你名字",
-            "你叫",
             "你以后叫",
+            "以后你叫",
             "给你改名",
             "把你改名",
             "助手名字",
@@ -207,17 +258,44 @@ class MemoryExtractionSaver(
             "你的角色",
             "你的性格",
             "你的语气",
-            "persona"
+            "你的使命",
+            "你的目标",
+            "你的专长",
+            "你擅长",
+            "你的沟通风格",
+            "你的交流风格",
+            "你的说话风格",
+            "你的行为规则",
+            "你的边界",
+            "你的限制",
+            "你的工具策略",
+            "你的工具使用策略",
+            "你的记忆策略",
+            "你的示例对话"
         )
-        val modelOutputMarkers = listOf(
-            "用户希望ai名字",
-            "用户希望助手名字",
-            "用户希望模型名字",
-            "用户想把ai名字",
-            "用户想把助手名字"
+        val englishAssistantMarkers = listOf(
+            "yourpersona",
+            "yourmission",
+            "yourexpertise",
+            "yourcommunicationstyle",
+            "yourtoolpolicy",
+            "yourmemorypolicy",
+            "yourexampledialogues"
         )
-        return assistantIdentityMarkers.any { compact.contains(it) } ||
-            modelOutputMarkers.any { compact.contains(it) }
+        val directAssistantName = compact.indexOf("你叫")
+            .takeIf { it >= 0 }
+            ?.let { compact.getOrNull(it + "你叫".length) != '我' } == true
+        if (assistantIdentityMarkers.any { compact.contains(it) } ||
+            directAssistantName ||
+            englishAssistantMarkers.any { compact.contains(it) }
+        ) {
+            return true
+        }
+
+        val userIdentityMarkers = listOf("我叫", "我是", "我的名字", "叫我", "称呼我", "喊我", "callme", "myname")
+        if (userIdentityMarkers.any { compact.contains(it) }) return false
+
+        return false
     }
 
     private fun memoryFingerprint(content: String): String {

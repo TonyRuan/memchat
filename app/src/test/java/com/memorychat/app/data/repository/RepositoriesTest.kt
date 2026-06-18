@@ -98,7 +98,13 @@ class RepositoriesTest {
                 {
                   "id": "p1",
                   "name": "Imported",
+                  "mission": "帮助用户推进工程任务",
+                  "expertise": ["Android", "Agent"],
+                  "communicationStyle": "短句、直接",
                   "behaviorRules": ["rule-a", "rule-b"],
+                  "toolPolicy": ["实时信息先搜索"],
+                  "memoryPolicy": ["人格设置不写入 Memory"],
+                  "exampleDialogues": ["用户：你是谁？\n助手：我是 Imported。"],
                   "isDefault": true
                 }
               ]
@@ -111,6 +117,12 @@ class RepositoriesTest {
         assertEquals(1, result.imported)
         assertNotNull(persona)
         assertEquals(listOf("rule-a", "rule-b"), persona?.behaviorRules)
+        assertEquals("帮助用户推进工程任务", persona?.mission)
+        assertEquals(listOf("Android", "Agent"), persona?.expertise)
+        assertEquals("短句、直接", persona?.communicationStyle)
+        assertEquals(listOf("实时信息先搜索"), persona?.toolPolicy)
+        assertEquals(listOf("人格设置不写入 Memory"), persona?.memoryPolicy)
+        assertEquals(listOf("用户：你是谁？\n助手：我是 Imported。"), persona?.exampleDialogues)
         assertTrue(persona?.isDefault == true)
     }
 
@@ -156,7 +168,13 @@ class RepositoriesTest {
             insert(PersonaEntity(
                 id = "p1",
                 name = "Exported",
+                mission = "帮助用户推进工程任务",
+                expertiseJson = """["Android"]""",
+                communicationStyle = "短句、直接",
                 behaviorRulesJson = """["rule-a"]""",
+                toolPolicyJson = """["实时信息先搜索"]""",
+                memoryPolicyJson = """["人格设置不写入 Memory"]""",
+                exampleDialoguesJson = """["用户：你是谁？\n助手：我是 Exported。"]""",
                 isDefault = 1
             ))
         })
@@ -169,8 +187,14 @@ class RepositoriesTest {
             .asJsonObject
 
         assertTrue(personaJson.has("behavior_rules"))
+        assertTrue(personaJson.has("communication_style"))
+        assertTrue(personaJson.has("tool_policy"))
+        assertTrue(personaJson.has("memory_policy"))
+        assertTrue(personaJson.has("example_dialogues"))
         assertTrue(personaJson.has("is_default"))
         assertFalse(personaJson.has("behaviorRules"))
+        assertFalse(personaJson.has("communicationStyle"))
+        assertFalse(personaJson.has("toolPolicy"))
         assertFalse(personaJson.has("isDefault"))
     }
 

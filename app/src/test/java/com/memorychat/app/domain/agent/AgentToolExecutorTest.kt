@@ -25,7 +25,16 @@ class AgentToolExecutorTest {
                 toolCalls = listOf(
                     AgentToolCall(
                         name = "update_persona",
-                        arguments = mapOf("name" to "噜噜", "tone" to "活泼")
+                        arguments = mapOf(
+                            "name" to "噜噜",
+                            "tone" to "活泼",
+                            "mission" to "陪用户推进工程任务",
+                            "expertise" to listOf("Android", "Kotlin"),
+                            "communication_style" to "短句、直接、先给结论",
+                            "tool_policy" to listOf("需要实时信息时使用搜索"),
+                            "memory_policy" to listOf("助手人格设置只写 Persona，不写 Memory"),
+                            "example_dialogues" to listOf("用户：你是谁？\n助手：我是噜噜，会直接帮你推进。")
+                        )
                     )
                 )
             ),
@@ -36,6 +45,12 @@ class AgentToolExecutorTest {
 
         assertEquals("噜噜", result.persona.name)
         assertEquals("活泼", result.persona.tone)
+        assertEquals("陪用户推进工程任务", result.persona.mission)
+        assertEquals(listOf("Android", "Kotlin"), result.persona.expertise)
+        assertEquals("短句、直接、先给结论", result.persona.communicationStyle)
+        assertEquals(listOf("需要实时信息时使用搜索"), result.persona.toolPolicy)
+        assertEquals(listOf("助手人格设置只写 Persona，不写 Memory"), result.persona.memoryPolicy)
+        assertEquals(listOf("用户：你是谁？\n助手：我是噜噜，会直接帮你推进。"), result.persona.exampleDialogues)
         assertEquals("噜噜", personaStore.saved.single().name)
         assertTrue(result.toolResults.single().contains("update_persona"))
         assertEquals(1, result.appliedActions.size)
@@ -43,6 +58,41 @@ class AgentToolExecutorTest {
         assertEquals("牛牛", result.appliedActions.single().before)
         assertEquals("噜噜", result.appliedActions.single().after)
         assertEquals("好的，已经改名为「噜噜」。", result.appliedActions.single().userVisibleText)
+    }
+
+    @Test
+    fun updatePersonaSplitsModelEchoedSemicolonLists() = runTest {
+        val personaStore = FakePersonaStore()
+        val memoryStore = FakeMemoryStore()
+        val executor = AgentToolExecutor(personaStore, memoryStore) { 1_717_171_717_000L }
+        val persona = Persona(
+            id = "persona-1",
+            name = "牛牛",
+            toolPolicy = listOf("需要实时信息时使用搜索", "本地状态可验证时优先读真实数据"),
+            memoryPolicy = listOf("人格设置只写 Persona", "用户资料写入 Memory")
+        )
+
+        val result = executor.execute(
+            decision = AgentDecision(
+                toolCalls = listOf(
+                    AgentToolCall(
+                        name = "update_persona",
+                        arguments = mapOf(
+                            "name" to "验证桃子",
+                            "tool_policy" to listOf("需要实时信息时使用搜索; 本地状态可验证时优先读真实数据"),
+                            "memory_policy" to listOf("人格设置只写 Persona; 用户资料写入 Memory")
+                        )
+                    )
+                )
+            ),
+            persona = persona,
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            sourceMessages = listOf(ChatMessage(id = "msg-1", conversationId = "conv-1", role = "user", content = "给你改名为验证桃子"))
+        )
+
+        assertEquals("验证桃子", result.persona.name)
+        assertEquals(listOf("需要实时信息时使用搜索", "本地状态可验证时优先读真实数据"), result.persona.toolPolicy)
+        assertEquals(listOf("人格设置只写 Persona", "用户资料写入 Memory"), result.persona.memoryPolicy)
     }
 
     @Test

@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.memorychat.app.MemoryChatApp
 import com.memorychat.app.domain.model.Memory
 import com.memorychat.app.domain.model.MemoryStatus
@@ -23,7 +24,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun MemoryCenterScreen(onBack: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val app = context.applicationContext as MemoryChatApp
     val scope = rememberCoroutineScope()
 
@@ -96,7 +97,7 @@ fun MemoryCenterScreen(onBack: () -> Unit) {
                 if (selectedTab == 1) {
                     item {
                         Text(
-                            text = "人格是助手的名字、角色和语气设置，不属于用户长期记忆。",
+                            text = "人格是助手的稳定契约，包括身份、使命、专长、风格、规则和边界，不属于用户长期记忆。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -236,9 +237,15 @@ fun EditPersonaDialog(persona: Persona, onDismiss: () -> Unit, onSave: (Persona)
     var name by remember { mutableStateOf(persona.name) }
     var description by remember { mutableStateOf(persona.description.orEmpty()) }
     var role by remember { mutableStateOf(persona.role.orEmpty()) }
+    var mission by remember { mutableStateOf(persona.mission.orEmpty()) }
+    var expertise by remember { mutableStateOf(persona.expertise.joinToString("；")) }
     var tone by remember { mutableStateOf(persona.tone.orEmpty()) }
+    var communicationStyle by remember { mutableStateOf(persona.communicationStyle.orEmpty()) }
     var behaviorRules by remember { mutableStateOf(persona.behaviorRules.joinToString("；")) }
     var boundaries by remember { mutableStateOf(persona.boundaries.joinToString("；")) }
+    var toolPolicy by remember { mutableStateOf(persona.toolPolicy.joinToString("；")) }
+    var memoryPolicy by remember { mutableStateOf(persona.memoryPolicy.joinToString("；")) }
+    var exampleDialogues by remember { mutableStateOf(persona.exampleDialogues.joinToString("\n\n")) }
     var isDefault by remember { mutableStateOf(persona.isDefault) }
 
     AlertDialog(
@@ -252,9 +259,15 @@ fun EditPersonaDialog(persona: Persona, onDismiss: () -> Unit, onSave: (Persona)
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名称") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("描述") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = role, onValueChange = { role = it }, label = { Text("角色") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = mission, onValueChange = { mission = it }, label = { Text("使命") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = expertise, onValueChange = { expertise = it }, label = { Text("专长（用分号分隔）") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = tone, onValueChange = { tone = it }, label = { Text("语气") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = communicationStyle, onValueChange = { communicationStyle = it }, label = { Text("沟通风格") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = behaviorRules, onValueChange = { behaviorRules = it }, label = { Text("行为规则（用分号分隔）") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = boundaries, onValueChange = { boundaries = it }, label = { Text("边界（用分号分隔）") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = toolPolicy, onValueChange = { toolPolicy = it }, label = { Text("工具策略（用分号分隔）") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = memoryPolicy, onValueChange = { memoryPolicy = it }, label = { Text("记忆策略（用分号分隔）") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = exampleDialogues, onValueChange = { exampleDialogues = it }, label = { Text("示例对话（空行分隔）") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("默认人格")
                     Switch(checked = isDefault, onCheckedChange = { isDefault = it })
@@ -270,9 +283,15 @@ fun EditPersonaDialog(persona: Persona, onDismiss: () -> Unit, onSave: (Persona)
                                 name = name.trim(),
                                 description = description.trim().ifBlank { null },
                                 role = role.trim().ifBlank { null },
+                                mission = mission.trim().ifBlank { null },
+                                expertise = PersonaDisplayFormatter.parseListField(expertise),
                                 tone = tone.trim().ifBlank { null },
+                                communicationStyle = communicationStyle.trim().ifBlank { null },
                                 behaviorRules = PersonaDisplayFormatter.parseListField(behaviorRules),
                                 boundaries = PersonaDisplayFormatter.parseListField(boundaries),
+                                toolPolicy = PersonaDisplayFormatter.parseListField(toolPolicy),
+                                memoryPolicy = PersonaDisplayFormatter.parseListField(memoryPolicy),
+                                exampleDialogues = PersonaDisplayFormatter.parseExampleDialogues(exampleDialogues),
                                 isDefault = isDefault,
                                 updatedAt = System.currentTimeMillis()
                             )

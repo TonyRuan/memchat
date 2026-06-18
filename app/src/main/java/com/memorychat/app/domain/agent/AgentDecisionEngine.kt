@@ -53,10 +53,17 @@ class AgentDecisionEngine(
             """
 Current assistant persona:
 Name: ${it.name}
+Identity: ${it.description}
 Role: ${it.role}
+Mission: ${it.mission}
+Expertise: ${it.expertise.joinToString("; ")}
 Tone: ${it.tone}
+Communication Style: ${it.communicationStyle}
 Rules: ${it.behaviorRules.joinToString("; ")}
 Boundaries: ${it.boundaries.joinToString("; ")}
+Tool Policy: ${it.toolPolicy.joinToString("; ")}
+Memory Policy: ${it.memoryPolicy.joinToString("; ")}
+Example Dialogues: ${it.exampleDialogues.joinToString(" | ")}
 """.trimIndent()
         } ?: "Current assistant persona: (unknown)"
 
@@ -70,20 +77,24 @@ Allowed tools:
 - search_docs: read app/project documentation for this answer only.
 - web_search: search the live web for current public information using the model provider's built-in search tool.
 - recall_memory: request relevant long-term memories when needed.
-- update_persona: update the assistant persona name, role, tone, behavior rules, or boundaries.
+- update_persona: update the assistant persona name, role, mission, expertise, tone, communication style, behavior rules, boundaries, tool policy, memory policy, or example dialogues.
 - save_memory: save a stable long-term user/profile/project/preference fact.
 - set_user_addressing_preference: save how the user wants the assistant to address them. Never update assistant persona for this.
 
 Rules:
 - Assistant persona is the assistant identity and behavior. User addressing is how the assistant calls the user.
 - One-off formatting requests such as Markdown, lists, or code blocks only set temporary_response_format.
+- Do not create temporary personas. If the user asks for a one-time style, use temporary_response_format or continue chat without update_persona.
+- Permanent assistant persona updates may change name, role, mission, expertise, tone, communication style, behavior rules, boundaries, tool policy, memory policy, or example dialogues.
+- Only include update_persona fields that the user explicitly changed. Leave unchanged fields null or empty; do not echo current persona fields.
+- For persona list fields that the user explicitly changed, return the full final desired list. To add one item, include existing kept items plus the new item; to replace, omit old items.
 - Document search results are temporary context and must not become long-term memory unless the user explicitly asks to remember the conclusion.
 - Return strict JSON only.
 
 JSON schema:
 {
   "tool_calls": [
-    {"name": "update_persona", "arguments": {"name": null, "role": null, "tone": null, "behavior_rules": [], "boundaries": []}},
+    {"name": "update_persona", "arguments": {"name": null, "role": null, "mission": null, "expertise": [], "tone": null, "communication_style": null, "behavior_rules": [], "boundaries": [], "tool_policy": [], "memory_policy": [], "example_dialogues": []}},
     {"name": "save_memory", "arguments": {"type": "profile|preference|project|summary", "content": "...", "importance": 3, "confidence": 0.8}},
     {"name": "set_user_addressing_preference", "arguments": {"addressing": "..."}},
     {"name": "search_docs", "arguments": {"query": "..."}},

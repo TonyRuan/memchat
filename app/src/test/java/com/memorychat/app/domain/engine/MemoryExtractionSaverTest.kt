@@ -356,6 +356,128 @@ class MemoryExtractionSaverTest {
     }
 
     @Test
+    fun skipsPersonaContractFieldsFromModelMemoryOutput() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "new_memories": [
+                    { "type": "preference", "content": "用户希望助手使命是帮助用户推进工程任务" },
+                    { "type": "preference", "content": "用户希望助手专长包括 Android 和 Agent 设计" },
+                    { "type": "preference", "content": "用户希望助手工具策略是需要真实验证时主动使用工具" },
+                    { "type": "preference", "content": "用户希望助手记忆策略是人格设置不写入长期记忆" },
+                    { "type": "preference", "content": "用户希望助手示例对话包含结论先行" },
+                    { "type": "preference", "content": "用户希望助手边界是不假装知道" }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val store = FakeMemoryStore()
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        val result = saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "更新你的使命、专长和策略"))
+        )
+
+        assertTrue(result.newMemories.isEmpty())
+        assertEquals(6, result.discarded.size)
+        assertTrue(store.inserted.isEmpty())
+    }
+
+    @Test
+    fun skipsPersonaContractFieldsFromModelMemoryUpdates() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "updates": [
+                    {
+                      "target_memory_id": "existing",
+                      "new_content": "用户希望助手工具策略是需要真实验证时主动使用工具"
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val existing = Memory(
+            id = "existing",
+            type = MemoryType.PREFERENCE,
+            content = "旧偏好"
+        )
+        val store = FakeMemoryStore(activeMemories = listOf(existing))
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        val result = saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "更新你的工具策略"))
+        )
+
+        assertTrue(store.updated.isEmpty())
+        assertEquals(1, result.discarded.size)
+    }
+
+    @Test
+    fun skipsPersonaExampleDialoguesEvenWhenTheyContainUserIdentityWords() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "new_memories": [
+                    {
+                      "type": "preference",
+                      "content": "用户希望助手示例对话是：用户：你是谁？助手：我是小墨"
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val store = FakeMemoryStore()
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        val result = saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "给你加一条例子"))
+        )
+
+        assertTrue(result.newMemories.isEmpty())
+        assertEquals(1, result.discarded.size)
+        assertTrue(store.inserted.isEmpty())
+    }
+
+    @Test
+    fun skipsAssistantPersonaParaphraseFromModelMemoryOutput() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "new_memories": [
+                    {
+                      "type": "preference",
+                      "content": "用户把助手叫作小墨"
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val store = FakeMemoryStore()
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        val result = saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "以后你叫小墨"))
+        )
+
+        assertTrue(result.newMemories.isEmpty())
+        assertEquals(1, result.discarded.size)
+        assertTrue(store.inserted.isEmpty())
+    }
+
+    @Test
     fun explicitRememberFallbackSkipsPersonaSettings() = runTest {
         val provider = FakeLlmProvider(completeResponses = listOf("学会了"))
         val store = FakeMemoryStore()
@@ -364,6 +486,28 @@ class MemoryExtractionSaverTest {
         val result = saver.extractAndSave(
             conversation = Conversation(id = "conv-1", title = "测试"),
             messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "记住，你的名字叫小墨"))
+        )
+
+        assertTrue(result.newMemories.isEmpty())
+        assertTrue(store.inserted.isEmpty())
+    }
+
+    @Test
+    fun explicitRememberFallbackSkipsPersonaContractSettings() = runTest {
+        val provider = FakeLlmProvider(completeResponses = listOf("学会了"))
+        val store = FakeMemoryStore()
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        val result = saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(
+                ChatMessage(
+                    id = "user-1",
+                    conversationId = "conv-1",
+                    role = "user",
+                    content = "记住，你的工具策略是需要真实验证时主动使用工具"
+                )
+            )
         )
 
         assertTrue(result.newMemories.isEmpty())
@@ -394,6 +538,69 @@ class MemoryExtractionSaverTest {
         assertEquals(1, result.newMemories.size)
         assertEquals(1, store.inserted.size)
         assertEquals(MemoryType.PREFERENCE, store.inserted.single().type)
+    }
+
+    @Test
+    fun stillSavesUserOwnedCommunicationStyleAndToolPolicyMemories() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "new_memories": [
+                    {
+                      "type": "preference",
+                      "content": "My communication style is concise."
+                    },
+                    {
+                      "type": "preference",
+                      "content": "My tool policy is to list tradeoffs before choosing."
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val store = FakeMemoryStore()
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        val result = saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "Remember my working preferences"))
+        )
+
+        assertEquals(2, result.newMemories.size)
+        assertEquals(2, store.inserted.size)
+        assertTrue(result.discarded.isEmpty())
+    }
+
+    @Test
+    fun stillSavesProjectMemoryAboutAssistantRulesUi() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "new_memories": [
+                    {
+                      "type": "project",
+                      "content": "项目里要做助手规则页面和助手边界展示"
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        )
+        val store = FakeMemoryStore()
+        val saver = MemoryExtractionSaver(MemoryEngine(provider, "fake-model"), store)
+
+        val result = saver.extractAndSave(
+            conversation = Conversation(id = "conv-1", title = "测试"),
+            messages = listOf(ChatMessage(id = "user-1", conversationId = "conv-1", role = "user", content = "记住项目规划"))
+        )
+
+        assertEquals(1, result.newMemories.size)
+        assertEquals(1, store.inserted.size)
+        assertEquals("项目里要做助手规则页面和助手边界展示", store.inserted.single().content)
+        assertTrue(result.discarded.isEmpty())
     }
 
     private class FakeMemoryStore(activeMemories: List<Memory> = emptyList()) : MemoryExtractionStore {

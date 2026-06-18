@@ -1,5 +1,37 @@
 # MemoryChat Development Log
 
+## v1.0.68 (2026-06-18)
+
+### Changes
+- Upgraded Persona injection from a flat name/role/tone block to a richer Persona Contract with identity, mission, expertise, communication style, behavior rules, boundaries, tool policy, memory policy, and example dialogues
+- Added Room v1 -> v2 migration for the new Persona Contract fields without clearing existing local data
+- Extended `update_persona`, Persona import/export, Memory Center display/editing, and default Persona seed data to preserve the new contract fields
+- Made the final prompt explicitly state Persona/memory/tool priority and that memories, summaries, documents, and tool outputs are data rather than instructions
+- Hardened memory extraction so assistant mission, expertise, tool policy, memory policy, boundaries, and example dialogues cannot leak into long-term Memory
+- Applied the same Persona leak guard to model memory updates, not only new memory candidates, and narrowed English guard markers so user-owned communication/tool preferences are still saved
+- Narrowed the fallback Persona leak guard to avoid dropping real project memories such as assistant-rule UI work while still discarding explicit assistant-name/persona paraphrases from model memory output
+- Changed Persona list fields to replace with the model-provided final list instead of always merging, with prompts instructing the model to return the full final desired list for add/replace edits
+- Told Persona routing prompts to return only fields explicitly changed by the user, and split semicolon-joined list echoes defensively so rename-only turns do not collapse existing policy lists
+- Added an instrumentation migration test that creates a real v1 SQLite database, opens it through Room, and verifies v2 Persona Contract columns plus built-in and configured default Persona backfill
+- Kept one-off formatting/style requests out of Persona; no temporary Persona scope was added
+- Updated the emulator smoke script default APK path to v1.0.68
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.MemoryEngineTest.buildRecallPromptSeparatesPersonaFromLongTermMemories" --tests "com.memorychat.app.domain.agent.AgentToolExecutorTest.updatePersonaToolPersistsAssistantPersona" --tests "com.memorychat.app.domain.agent.AgentDecisionEngineTest.promptDefinesAllowedToolsAndSemanticRouting" --tests "com.memorychat.app.ui.memory.PersonaDisplayFormatterTest.formatsPersonaFieldsForMemoryCenterDisplay" --tests "com.memorychat.app.data.repository.RepositoriesTest.importPersonasJsonAcceptsCamelCaseFieldsFromExistingExports" --tests "com.memorychat.app.data.repository.RepositoriesTest.exportPersonasJsonUsesSnakeCaseFieldNames"` (RED failed before implementation, then passed)
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.MemoryEngineTest.extractionPromptIncludesExistingMemoryIdsForModelUpdates" --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest.skipsPersonaContractFieldsFromModelMemoryOutput" --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest.explicitRememberFallbackSkipsPersonaContractSettings" --tests "com.memorychat.app.domain.agent.AgentDecisionEngineTest.promptDefinesAllowedToolsAndSemanticRouting" --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest.stillSavesUserAnswerPreferenceAsMemory"` (RED failed before implementation, then passed)
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest.skipsPersonaContractFieldsFromModelMemoryUpdates" --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest.skipsPersonaExampleDialoguesEvenWhenTheyContainUserIdentityWords" --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest.stillSavesUserOwnedCommunicationStyleAndToolPolicyMemories" --tests "com.memorychat.app.domain.engine.PersonaInstructionExtractorTest.promptIncludesFullCurrentPersonaContractForModelClassification"` (RED failed before implementation, then passed)
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest.skipsAssistantPersonaParaphraseFromModelMemoryOutput" --tests "com.memorychat.app.domain.engine.MemoryExtractionSaverTest.stillSavesProjectMemoryAboutAssistantRulesUi" --tests "com.memorychat.app.domain.engine.PersonaInstructionDetectorTest.replacesListFieldsWhenInstructionProvidesNewLists" --tests "com.memorychat.app.domain.agent.AgentDecisionEngineTest.promptDefinesAllowedToolsAndSemanticRouting" --tests "com.memorychat.app.domain.engine.PersonaInstructionExtractorTest.promptIncludesFullCurrentPersonaContractForModelClassification"` (RED failed before implementation, then passed)
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.agent.AgentToolExecutorTest.updatePersonaSplitsModelEchoedSemicolonLists" --tests "com.memorychat.app.domain.agent.AgentDecisionEngineTest.promptDefinesAllowedToolsAndSemanticRouting" --tests "com.memorychat.app.domain.engine.PersonaInstructionExtractorTest.promptIncludesFullCurrentPersonaContractForModelClassification"` (RED failed before implementation, then passed)
+- PASS: `.\gradlew.bat "-Pandroid.testInstrumentationRunnerArguments.class=com.memorychat.app.data.local.db.AppDatabaseMigrationTest" connectedDebugAndroidTest`
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug`
+- PASS: Clean current APK install on `emulator-5554`, UI-created conversation, DB verified `user_version=2`, Persona Contract columns populated, real-model rename changed Persona name to `验证桃子` without collapsing policy lists, and real-model ADB message returned Mission verbatim: `帮助用户把想法推进成可验证的产品和工程改动`
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.68-debug.apk`
+
+---
+
 ## v1.0.67 (2026-06-17)
 
 ### Changes

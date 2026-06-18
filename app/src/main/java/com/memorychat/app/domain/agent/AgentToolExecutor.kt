@@ -142,9 +142,15 @@ class AgentToolExecutor(
         return PersonaInstruction(
             name = stringArg("name")?.cleanToolText(),
             role = stringArg("role")?.cleanToolText(),
+            mission = stringArg("mission")?.cleanToolText(),
+            expertise = stringListArg("expertise").cleanToolTextList(),
             tone = stringArg("tone")?.cleanToolText(),
-            behaviorRules = stringListArg("behavior_rules").map { it.cleanToolText() }.filter { it.isNotBlank() },
-            boundaries = stringListArg("boundaries").map { it.cleanToolText() }.filter { it.isNotBlank() }
+            communicationStyle = stringArg("communication_style")?.cleanToolText(),
+            behaviorRules = stringListArg("behavior_rules").cleanToolTextList(),
+            boundaries = stringListArg("boundaries").cleanToolTextList(),
+            toolPolicy = stringListArg("tool_policy").cleanToolTextList(),
+            memoryPolicy = stringListArg("memory_policy").cleanToolTextList(),
+            exampleDialogues = stringListArg("example_dialogues").map { it.cleanExampleText() }.filter { it.isNotBlank() }
         )
     }
 
@@ -173,5 +179,16 @@ class AgentToolExecutor(
 
     private fun String.cleanToolText(): String {
         return trim().trim('。', '.', '，', ',', '：', ':', '"', '\'', '“', '”')
+    }
+
+    private fun List<String>.cleanToolTextList(): List<String> {
+        return flatMap { it.split(';', '；') }
+            .map { it.cleanToolText() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    private fun String.cleanExampleText(): String {
+        return trim().trim('"', '\'', '“', '”')
     }
 }

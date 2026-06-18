@@ -7,9 +7,15 @@ object PersonaDisplayFormatter {
         return buildList {
             addIfPresent("描述", persona.description)
             addIfPresent("角色", persona.role)
+            addIfPresent("使命", persona.mission)
+            addIfPresent("专长", persona.expertise.joinToString("；"))
             addIfPresent("语气", persona.tone)
+            addIfPresent("沟通风格", persona.communicationStyle)
             addIfPresent("规则", persona.behaviorRules.joinToString("；"))
             addIfPresent("边界", persona.boundaries.joinToString("；"))
+            addIfPresent("工具策略", persona.toolPolicy.joinToString("；"))
+            addIfPresent("记忆策略", persona.memoryPolicy.joinToString("；"))
+            addIfPresent("示例对话", persona.exampleDialogues.joinToString("\n\n"))
         }
     }
 
@@ -23,6 +29,13 @@ object PersonaDisplayFormatter {
     fun parseListField(value: String): List<String> {
         return value
             .split("；", ";", "\n")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+    }
+
+    fun parseExampleDialogues(value: String): List<String> {
+        return value
+            .split(Regex("\\n\\s*\\n"))
             .map { it.trim() }
             .filter { it.isNotBlank() }
     }

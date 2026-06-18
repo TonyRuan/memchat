@@ -36,7 +36,15 @@ class PersonaInstructionExtractor(
 Current assistant persona:
 Name: ${it.name}
 Role: ${it.role}
+Mission: ${it.mission}
+Expertise: ${it.expertise.joinToString("; ")}
 Tone: ${it.tone}
+Communication Style: ${it.communicationStyle}
+Rules: ${it.behaviorRules.joinToString("; ")}
+Boundaries: ${it.boundaries.joinToString("; ")}
+Tool Policy: ${it.toolPolicy.joinToString("; ")}
+Memory Policy: ${it.memoryPolicy.joinToString("; ")}
+Example Dialogues: ${it.exampleDialogues.joinToString(" | ")}
 """.trimIndent()
         } ?: "Current assistant persona: (unknown)"
 
@@ -51,16 +59,25 @@ Return strict JSON only:
   "is_persona_instruction": true|false,
   "name": string|null,
   "role": string|null,
+  "mission": string|null,
+  "expertise": string[],
   "tone": string|null,
+  "communication_style": string|null,
   "behavior_rules": string[],
-  "boundaries": string[]
+  "boundaries": string[],
+  "tool_policy": string[],
+  "memory_policy": string[],
+  "example_dialogues": string[]
 }
 
 Rules:
 - Decide by semantic meaning, not by keyword matching.
 - Assistant persona means the user is naming or configuring the assistant, not describing the user.
 - The user may omit the subject when continuing to rename the current assistant persona, e.g. "改成猪妞吧".
-- If the message semantically sets the assistant's name, nickname, role, tone, personality, behavior rules, or boundaries, category is assistant_persona_update and is_persona_instruction is true.
+- If the message semantically sets the assistant's name, nickname, role, mission, expertise, tone, communication style, personality, behavior rules, tool policy, memory policy, example dialogues, or boundaries, category is assistant_persona_update and is_persona_instruction is true.
+- Only include fields that the user explicitly changed. Leave unchanged fields null or empty; do not echo current persona fields.
+- For list fields that the user explicitly changed, return the full final desired list. To add one item, include existing kept items plus the new item; to replace, omit old items.
+- Do not create temporary personas. One-time wording or formatting requests are not assistant persona updates.
 - Natural wording such as "给你改名字为比比拉布" is an assistant persona update.
 - If the user asks the assistant to call or address the user by a name, category is user_addressing_preference and is_persona_instruction is false.
 - If the user describes their own name, preference, or profile, category is user_profile and is_persona_instruction is false.
@@ -85,9 +102,15 @@ $content
         val instruction = PersonaInstruction(
             name = obj.stringOrNull("name")?.cleanModelValue(),
             role = obj.stringOrNull("role")?.cleanModelValue(),
+            mission = obj.stringOrNull("mission")?.cleanModelValue(),
+            expertise = obj.stringList("expertise"),
             tone = obj.stringOrNull("tone")?.cleanModelValue(),
+            communicationStyle = obj.stringOrNull("communication_style")?.cleanModelValue(),
             behaviorRules = obj.stringList("behavior_rules"),
-            boundaries = obj.stringList("boundaries")
+            boundaries = obj.stringList("boundaries"),
+            toolPolicy = obj.stringList("tool_policy"),
+            memoryPolicy = obj.stringList("memory_policy"),
+            exampleDialogues = obj.stringList("example_dialogues", splitSemicolon = false)
         )
         return instruction.takeUnless { it.isEmpty() }
     }
@@ -117,11 +140,16 @@ $content
         return element.asString
     }
 
-    private fun JsonObject.stringList(key: String): List<String> {
+    private fun JsonObject.stringList(key: String, splitSemicolon: Boolean = true): List<String> {
         val array = getAsJsonArray(key) ?: return emptyList()
-        return array.mapNotNull { element ->
-            if (element.isJsonNull) null else element.asString.cleanModelValue()
-        }.filter { it.isNotBlank() }.distinct()
+        return array.flatMap { element ->
+            if (element.isJsonNull) {
+                emptyList()
+            } else {
+                val value = element.asString.cleanModelValue()
+                if (splitSemicolon) value.split(';', '；') else listOf(value)
+            }
+        }.map { it.cleanModelValue() }.filter { it.isNotBlank() }.distinct()
     }
 
     private fun String.cleanModelValue(): String {

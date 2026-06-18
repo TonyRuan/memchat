@@ -117,15 +117,64 @@ class PersonaRepository(private val personaDao: PersonaDao) {
         val bounds: List<String> = try {
             gson.fromJson<List<String>>(boundariesJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
         } catch (_: Exception) { emptyList() }
-        return Persona(id, name, avatar, description, role, tone, rules, bounds, proactivity, isDefault == 1, createdAt, updatedAt)
+        val expertise: List<String> = parseStringList(expertiseJson)
+        val toolPolicy: List<String> = parseStringList(toolPolicyJson)
+        val memoryPolicy: List<String> = parseStringList(memoryPolicyJson)
+        val examples: List<String> = parseStringList(exampleDialoguesJson)
+        return Persona(
+            id = id,
+            name = name,
+            avatar = avatar,
+            description = description,
+            role = role,
+            mission = mission,
+            expertise = expertise,
+            tone = tone,
+            communicationStyle = communicationStyle,
+            behaviorRules = rules,
+            boundaries = bounds,
+            toolPolicy = toolPolicy,
+            memoryPolicy = memoryPolicy,
+            exampleDialogues = examples,
+            proactivity = proactivity,
+            isDefault = isDefault == 1,
+            createdAt = createdAt,
+            updatedAt = updatedAt
+        )
     }
 
     private fun Persona.toEntity(): PersonaEntity {
-        return PersonaEntity(id, name, avatar, description, role, tone,
-            gson.toJson(behaviorRules), gson.toJson(boundaries), proactivity, if (isDefault) 1 else 0, createdAt, updatedAt)
+        return PersonaEntity(
+            id = id,
+            name = name,
+            avatar = avatar,
+            description = description,
+            role = role,
+            mission = mission,
+            expertiseJson = gson.toJson(expertise),
+            tone = tone,
+            communicationStyle = communicationStyle,
+            behaviorRulesJson = gson.toJson(behaviorRules),
+            boundariesJson = gson.toJson(boundaries),
+            toolPolicyJson = gson.toJson(toolPolicy),
+            memoryPolicyJson = gson.toJson(memoryPolicy),
+            exampleDialoguesJson = gson.toJson(exampleDialogues),
+            proactivity = proactivity,
+            isDefault = if (isDefault) 1 else 0,
+            createdAt = createdAt,
+            updatedAt = updatedAt
+        )
     }
 
     private val gson = Gson()
+
+    private fun parseStringList(json: String?): List<String> {
+        return try {
+            gson.fromJson<List<String>>(json, object : TypeToken<List<String>>() {}.type) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
 
     suspend fun getDefaultPersona() = personaDao.getDefault()?.toDomain()
     suspend fun getPersona(id: String) = personaDao.getById(id)?.toDomain()
@@ -157,9 +206,18 @@ class PersonaRepository(private val personaDao: PersonaDao) {
             name = "技术伙伴",
             description = "适合产品讨论、技术协作的默认人格",
             role = "技术协作者",
+            mission = "帮助用户把想法推进成可验证的产品和工程改动",
+            expertise = listOf("Android 应用", "长期记忆系统", "Agent 工具协作", "测试验证"),
             tone = "直接、清晰、有见地",
+            communicationStyle = "先给结论，再给关键依据和下一步；避免空泛安慰",
             behaviorRules = listOf("漏指令立即补全", "结论先行再展开", "必要时引用参考", "不确定时直接说明"),
             boundaries = listOf("不要假装知道不确定的信息", "不要在无偏好的时候硬编偏好"),
+            toolPolicy = listOf("需要实时信息、外部资料或真实验证时主动使用可用工具", "本地状态可验证时优先读真实数据"),
+            memoryPolicy = listOf("助手人格设置只写入 Persona，不写入长期记忆", "用户资料、偏好和项目事实写入 Memory"),
+            exampleDialogues = listOf(
+                "用户：你是谁？\n助手：我是技术伙伴，会直接帮你把产品想法拆成可验证的工程动作。",
+                "用户：这个方案靠谱吗？\n助手：结论先说：当前方案可行，但风险在验证链路。"
+            ),
             proactivity = 4,
             isDefault = true
         )
@@ -283,9 +341,15 @@ class ExportImportService(
                         avatar = o.stringValue("avatar"),
                         description = o.stringValue("description"),
                         role = o.stringValue("role"),
+                        mission = o.stringValue("mission"),
+                        expertise = o.stringListValue("expertise"),
                         tone = o.stringValue("tone"),
+                        communicationStyle = o.stringValue("communication_style", "communicationStyle"),
                         behaviorRules = o.stringListValue("behavior_rules", "behaviorRules"),
                         boundaries = o.stringListValue("boundaries"),
+                        toolPolicy = o.stringListValue("tool_policy", "toolPolicy"),
+                        memoryPolicy = o.stringListValue("memory_policy", "memoryPolicy"),
+                        exampleDialogues = o.stringListValue("example_dialogues", "exampleDialogues"),
                         proactivity = o.intValue("proactivity") ?: 3,
                         isDefault = o.booleanValue("is_default", "isDefault") ?: false,
                         createdAt = o.longValue("created_at", "createdAt") ?: System.currentTimeMillis(),
@@ -310,9 +374,15 @@ class ExportImportService(
         "avatar" to avatar,
         "description" to description,
         "role" to role,
+        "mission" to mission,
+        "expertise" to expertise,
         "tone" to tone,
+        "communication_style" to communicationStyle,
         "behavior_rules" to behaviorRules,
         "boundaries" to boundaries,
+        "tool_policy" to toolPolicy,
+        "memory_policy" to memoryPolicy,
+        "example_dialogues" to exampleDialogues,
         "proactivity" to proactivity,
         "is_default" to isDefault,
         "created_at" to createdAt,

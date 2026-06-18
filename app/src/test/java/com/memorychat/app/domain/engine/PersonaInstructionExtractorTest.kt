@@ -115,6 +115,54 @@ class PersonaInstructionExtractorTest {
     }
 
     @Test
+    fun promptIncludesFullCurrentPersonaContractForModelClassification() = runTest {
+        val provider = FakeLlmProvider(
+            completeResponses = listOf(
+                """
+                {
+                  "category": "other",
+                  "is_persona_instruction": false,
+                  "name": null,
+                  "role": null,
+                  "mission": null,
+                  "expertise": [],
+                  "tone": null,
+                  "communication_style": null,
+                  "behavior_rules": [],
+                  "boundaries": [],
+                  "tool_policy": [],
+                  "memory_policy": [],
+                  "example_dialogues": []
+                }
+                """.trimIndent()
+            )
+        )
+        val extractor = PersonaInstructionExtractor(provider, "fake-model")
+
+        extractor.detect(
+            content = "保持现在这样",
+            currentPersona = Persona(
+                name = "牛牛",
+                behaviorRules = listOf("结论先行"),
+                boundaries = listOf("不编造"),
+                toolPolicy = listOf("需要真实验证时主动用工具"),
+                memoryPolicy = listOf("人格设置只进 Persona"),
+                exampleDialogues = listOf("用户：你是谁？\n助手：我是牛牛")
+            )
+        )
+
+        val prompt = provider.completeRequests.single().messages.single().content
+        assertTrue(prompt.contains("Rules: 结论先行"))
+        assertTrue(prompt.contains("Boundaries: 不编造"))
+        assertTrue(prompt.contains("Tool Policy: 需要真实验证时主动用工具"))
+        assertTrue(prompt.contains("Memory Policy: 人格设置只进 Persona"))
+        assertTrue(prompt.contains("Example Dialogues: 用户：你是谁？"))
+        assertTrue(prompt.contains("example dialogues"))
+        assertTrue(prompt.contains("For list fields that the user explicitly changed"))
+        assertTrue(prompt.contains("Only include fields that the user explicitly changed"))
+    }
+
+    @Test
     fun usesModelClassificationForNaturalAssistantRenameWording() = runTest {
         val provider = FakeLlmProvider(
             completeResponses = listOf(

@@ -92,10 +92,20 @@ class AgentDecisionEngineTest {
         val prompt = provider.completeRequests.single().messages.single().content
         assertTrue(prompt.contains("Allowed tools"))
         assertTrue(prompt.contains("update_persona"))
+        assertTrue(prompt.contains("update the assistant persona name, role, mission, expertise"))
         assertTrue(prompt.contains("set_user_addressing_preference"))
         assertTrue(prompt.contains("web_search"))
         assertTrue(prompt.contains("Decide by semantic meaning"))
         assertTrue(prompt.contains("Current assistant persona"))
+        assertTrue(prompt.contains("mission"))
+        assertTrue(prompt.contains("expertise"))
+        assertTrue(prompt.contains("communication_style"))
+        assertTrue(prompt.contains("tool_policy"))
+        assertTrue(prompt.contains("memory_policy"))
+        assertTrue(prompt.contains("example_dialogues"))
+        assertTrue(prompt.contains("Do not create temporary personas"))
+        assertTrue(prompt.contains("For persona list fields that the user explicitly changed"))
+        assertTrue(prompt.contains("Only include update_persona fields that the user explicitly changed"))
     }
 
     @Test
