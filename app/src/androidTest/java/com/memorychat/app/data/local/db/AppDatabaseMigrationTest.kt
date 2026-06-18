@@ -124,7 +124,7 @@ class AppDatabaseMigrationTest {
         }
 
         val room = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
             .build()
         val db = room.openHelper.writableDatabase
 
@@ -170,6 +170,30 @@ class AppDatabaseMigrationTest {
         context.deleteDatabase(TEST_DB)
     }
 
+    @Test
+    fun migration2To3AddsMessageHistorySearchIndexes() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        context.deleteDatabase(TEST_DB)
+        createVersion2Database(context).close()
+
+        val room = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
+            .addMigrations(AppDatabase.MIGRATION_2_3)
+            .build()
+        val db = room.openHelper.writableDatabase
+
+        val indexNames = mutableSetOf<String>()
+        db.query("PRAGMA index_list(`messages`)").use { cursor ->
+            while (cursor.moveToNext()) {
+                indexNames += cursor.getString(cursor.getColumnIndexOrThrow("name"))
+            }
+        }
+        assertTrue(indexNames.contains("index_messages_conversationId_createdAt"))
+        assertTrue(indexNames.contains("index_messages_createdAt"))
+
+        room.close()
+        context.deleteDatabase(TEST_DB)
+    }
+
     private companion object {
         const val TEST_DB = "memorychat-migration-test"
         val PERSONA_CONTRACT_COLUMNS = setOf(
@@ -191,6 +215,96 @@ class AppDatabaseMigrationTest {
             path.parentFile?.mkdirs()
             return SQLiteDatabase.openOrCreateDatabase(path, null).apply {
                 version = 1
+            }
+        }
+
+        fun createVersion2Database(context: Context): SQLiteDatabase {
+            val path = context.getDatabasePath(TEST_DB)
+            path.parentFile?.mkdirs()
+            return SQLiteDatabase.openOrCreateDatabase(path, null).apply {
+                execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `conversations` (
+                        `id` TEXT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `personaId` TEXT,
+                        `useMemory` INTEGER NOT NULL,
+                        `generateMemory` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `messages` (
+                        `id` TEXT NOT NULL,
+                        `conversationId` TEXT NOT NULL,
+                        `role` TEXT NOT NULL,
+                        `content` TEXT NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `memories` (
+                        `id` TEXT NOT NULL,
+                        `type` TEXT NOT NULL,
+                        `content` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `importance` INTEGER NOT NULL,
+                        `confidence` REAL NOT NULL,
+                        `sourceMessageIds` TEXT,
+                        `sourceConversationId` TEXT,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        `lastUsedAt` INTEGER,
+                        `userEdited` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `memory_tombstones` (
+                        `id` TEXT NOT NULL,
+                        `memoryType` TEXT NOT NULL,
+                        `contentFingerprint` TEXT NOT NULL,
+                        `deletedReason` TEXT,
+                        `createdAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `personas` (
+                        `id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `avatar` TEXT,
+                        `description` TEXT,
+                        `role` TEXT,
+                        `mission` TEXT,
+                        `expertiseJson` TEXT,
+                        `tone` TEXT,
+                        `communicationStyle` TEXT,
+                        `behaviorRulesJson` TEXT,
+                        `boundariesJson` TEXT,
+                        `toolPolicyJson` TEXT,
+                        `memoryPolicyJson` TEXT,
+                        `exampleDialoguesJson` TEXT,
+                        `proactivity` INTEGER NOT NULL,
+                        `isDefault` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                version = 2
             }
         }
     }

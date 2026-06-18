@@ -144,7 +144,8 @@ data class MemoryRecallResult(
 data class MemoryQuery(
     val text: String = "",
     val types: List<MemoryType>? = null,
-    val limit: Int = 10
+    val limit: Int = 10,
+    val allowFallback: Boolean = true
 )
 
 data class ImportResult(

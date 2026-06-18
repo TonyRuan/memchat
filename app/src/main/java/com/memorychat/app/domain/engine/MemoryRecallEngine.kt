@@ -25,7 +25,7 @@ class MemoryRecallEngine {
         persona: Persona?
     ): MemoryRecallResult {
         val scene = detectScene(query.text)
-        val quotas = if (query.types == null) sceneQuotas(scene) else null
+        val quotas = if (query.types == null && query.allowFallback) sceneQuotas(scene) else null
         val allowedTypes = query.types?.toSet() ?: quotas?.keys
         val queryTerms = tokenize(query.text)
         val scoredMemories = allActiveMemories
@@ -42,6 +42,9 @@ class MemoryRecallEngine {
                 )
             }
             .toList()
+            .let { scored ->
+                if (query.allowFallback) scored else scored.filter { it.queryScore > 0 }
+            }
         val quotaLimited = quotas?.flatMap { (type, quota) ->
             scoredMemories
                 .filter { it.memory.type == type }

@@ -1,6 +1,7 @@
 package com.memorychat.app.data.local.db.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "conversations")
@@ -14,7 +15,13 @@ data class ConversationEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "messages")
+@Entity(
+    tableName = "messages",
+    indices = [
+        Index(value = ["conversationId", "createdAt"]),
+        Index(value = ["createdAt"])
+    ]
+)
 data class MessageEntity(
     @PrimaryKey val id: String,
     val conversationId: String,

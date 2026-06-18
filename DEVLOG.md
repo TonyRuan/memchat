@@ -1,5 +1,31 @@
 # MemoryChat Development Log
 
+## v1.0.71 (2026-06-18)
+
+### Changes
+- Hardened `recall_memory` so it skips without reading long-term memory when the current conversation has `useMemory=false`
+- Hardened `search_history` so both current-conversation and cross-conversation history search skip when `useMemory=false`
+- Changed explicit `recall_memory` tool calls to return only query-matched memories, while keeping automatic chat memory injection's scene fallback behavior
+- Added bounded, untrusted-context formatting and broader sensitive-token redaction for `recall_memory` and `search_history` tool results before they are reinjected into the final model prompt
+- Sanitized `search_docs` and `web_search` query echoes before they are added to tool results, including JSON/env-style key-value secrets
+- Added Room schema v3 message indexes for history search: `(conversationId, createdAt)` and `createdAt`
+- Added a v2 -> v3 migration and instrumentation coverage for the new message indexes
+- Updated Agent tool runtime documentation and emulator smoke script default APK path to v1.0.71
+
+### Verification
+- PASS: `.\gradlew.bat testDebugUnitTest --tests "com.memorychat.app.domain.agent.AgentToolExecutorTest" --tests "com.memorychat.app.domain.engine.MemoryEngineTest" --tests "com.memorychat.app.data.repository.RepositoriesTest"`
+- PASS: `.\gradlew.bat test`
+- PASS: `.\gradlew.bat assembleDebug --rerun-tasks`
+- PASS: `.\gradlew.bat "-Pandroid.testInstrumentationRunnerArguments.class=com.memorychat.app.data.local.db.AppDatabaseMigrationTest" connectedDebugAndroidTest`
+- PASS: `.\gradlew.bat "-Pandroid.testInstrumentationRunnerArguments.class=com.memorychat.app.MemoryChatSmokeTest#newChatOpensOnlyAfterConversationIsSaved" connectedDebugAndroidTest`
+- PASS: `.\gradlew.bat connectedDebugAndroidTest` after one transient UTP 0-test result handoff failure was retried
+- PASS: non-interactive ADB smoke on `emulator-5554`: installed `MemoryChat-v1.0.71-debug.apk`, created `新会话` via UI tap, sent a broadcast through `AdbInputReceiver`, verified logcat `[4/4] API response` and `=== DONE`, and confirmed the exported Room DB has `user_version=3` plus saved assistant/user messages
+
+### APK
+- `app/build/outputs/apk/debug/MemoryChat-v1.0.71-debug.apk`
+
+---
+
 ## v1.0.70 (2026-06-18)
 
 ### Changes
